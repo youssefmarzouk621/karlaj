@@ -1,0 +1,15 @@
+services:
+  keycloak:
+    extends:
+      file: keycloak.yml
+      service: keycloak
+
+  mysql:
+    extends:
+      file: mysql.yml
+      service: mysql
+
+  pma:
+    extends:
+      file: pma.yml
+      service: pma

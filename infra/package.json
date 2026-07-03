@@ -1,0 +1,10 @@
+{
+  "name": "brickart-infra",
+  "private": true,
+  "scripts": {
+    "services:up": "docker compose -f docker/services.yml up --wait",
+    "services:down": "docker compose -f docker/services.yml down",
+    "services:logs": "docker compose -f docker/services.yml logs -f",
+    "services:reset": "docker compose -f docker/services.yml down -v && rm -rf docker/data"
+  }
+}

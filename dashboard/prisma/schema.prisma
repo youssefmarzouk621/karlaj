@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model HeroContent {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(255)
+  titleAccent String   @map("title_accent") @db.VarChar(255)
+  subtitle    String   @db.Text
+  ctaText     String   @map("cta_text") @db.VarChar(100)
+  ctaLink     String   @map("cta_link") @db.VarChar(255)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("hero_content")
+}
+
+model Feature {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  icon        String   @db.VarChar(50)
+  sortOrder   Int      @default(0) @map("sort_order")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("features")
+}
+
+model PricingPlan {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  price       String   @db.VarChar(50)
+  period      String   @default("") @db.VarChar(20)
+  description String   @db.Text
+  featured    Boolean  @default(false)
+  ctaText     String   @map("cta_text") @db.VarChar(100)
+  ctaLink     String   @map("cta_link") @db.VarChar(255)
+  sortOrder   Int      @default(0) @map("sort_order")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  features PricingFeature[]
+
+  @@map("pricing_plans")
+}
+
+model PricingFeature {
+  id        String @id @default(uuid())
+  planId    String @map("plan_id")
+  text      String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  plan PricingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("pricing_features")
+}

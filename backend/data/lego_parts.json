@@ -1,0 +1,100 @@
+[
+  {
+    "part_id": "3070b",
+    "name": "1x1 Tile",
+    "width": 1,
+    "height": 1,
+    "weight": 1
+  },
+  {
+    "part_id": "3069b",
+    "name": "1x2 Tile",
+    "width": 2,
+    "height": 1,
+    "weight": 3
+  },
+  {
+    "part_id": "63864",
+    "name": "1x3 Tile",
+    "width": 3,
+    "height": 1,
+    "weight": 3
+  },
+  {
+    "part_id": "2431",
+    "name": "1x4 Tile",
+    "width": 4,
+    "height": 1,
+    "weight": 2
+  },
+  {
+    "part_id": "3068b",
+    "name": "2x2 Tile",
+    "width": 2,
+    "height": 2,
+    "weight": 4
+  },
+  {
+    "part_id": "26603",
+    "name": "2x3 Tile",
+    "width": 3,
+    "height": 2,
+    "weight": 2
+  },
+  {
+    "part_id": "3024",
+    "name": "1x1 Plate",
+    "width": 1,
+    "height": 1,
+    "weight": 2
+  },
+  {
+    "part_id": "3023",
+    "name": "1x2 Plate",
+    "width": 2,
+    "height": 1,
+    "weight": 3
+  },
+  {
+    "part_id": "3623",
+    "name": "1x3 Plate",
+    "width": 3,
+    "height": 1,
+    "weight": 2
+  },
+  {
+    "part_id": "3710",
+    "name": "1x4 Plate",
+    "width": 4,
+    "height": 1,
+    "weight": 2
+  },
+  {
+    "part_id": "3022",
+    "name": "2x2 Plate",
+    "width": 2,
+    "height": 2,
+    "weight": 3
+  },
+  {
+    "part_id": "3021",
+    "name": "2x3 Plate",
+    "width": 3,
+    "height": 2,
+    "weight": 2
+  },
+  {
+    "part_id": "3020",
+    "name": "2x4 Plate",
+    "width": 4,
+    "height": 2,
+    "weight": 1
+  },
+  {
+    "part_id": "98138",
+    "name": "1x1 Round Tile",
+    "width": 1,
+    "height": 1,
+    "weight": 2
+  }
+]
