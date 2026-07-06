@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const PYTHON_API = process.env.PYTHON_API_URL ?? "http://localhost:8000";
+import { getMosaicServiceUrl } from "@/lib/mosaicService";
 
 export async function GET(
   _request: NextRequest,
@@ -8,7 +7,7 @@ export async function GET(
 ) {
   const { jobId } = await params;
 
-  const res = await fetch(`${PYTHON_API}/pdf/${jobId}`);
+  const res = await fetch(`${getMosaicServiceUrl()}/pdf/${jobId}`);
 
   if (!res.ok) {
     return NextResponse.json(

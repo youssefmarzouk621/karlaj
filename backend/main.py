@@ -67,6 +67,7 @@ async def process(
         "placements": mosaic_data["placements"],
         "parts_list": mosaic_data["parts_list"],
         "total_parts": mosaic_data["total_parts"],
+        "preprocessing": mosaic_data["preprocessing"],
         "bags": jobs[job_id]["bags"],
     }
 

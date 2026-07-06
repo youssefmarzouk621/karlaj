@@ -35,14 +35,110 @@ separate module, and the output of one feeds the next.
 | Stage | File | Input | Output |
 |-------|------|-------|--------|
 | 1. Validate | `main.py` | HTTP upload (bytes, width, height) | validated bytes |
+| **0. Analyze & route** | `image_analysis.py`, `filter_profiles.py` | cropped image | chosen filter recipe |
 | 2. Pixelize | `processor.py` | image bytes | `width × height` RGB grid |
+| **2.4 Unify backdrop** ¹ | `background.py` | cropped image | flat-backdrop image |
+| **2.5 Flatten** ¹ | `filters.py` | working image | shade-flattened image |
 | 3. Color-match | `color_palette.py` | RGB grid | grid of LEGO color IDs |
+| **3.5 Despeckle** | `grid_cleanup.py` | color-ID grid | cleaned color-ID grid |
 | 4. Brick-fit | `brick_fitter.py` | color-ID grid | list of brick placements |
 | 5. Bag + PDF | `bag_organizer.py`, `pdf_generator.py` | placements | bags + printable PDF |
+
+> ¹ The preprocessing filters (2.4, 2.5, and others) are **no longer fixed** —
+> **Stage 0** analyzes each image and picks which of them run, and with what
+> parameters. A studio portrait gets backdrop-unify + gentle mean-shift; a busy
+> scene gets saturation/contrast + stronger mean-shift and *skips* backdrop-unify.
+> See [Stage 0](#15-stage-0--image-analysis--filter-routing).
+>
+> Stages **2.4**, **2.5** and **3.5** were added to fix *shadow banding* — a
+> shadow on the backdrop getting split into two LEGO colors with a hard seam.
+> The three attack it at escalating levels: **2.4** repaints the whole backdrop
+> one color, **2.5** flattens the subject, **3.5** cleans stray studs.
 
 Everything is kept **in memory**. Results are stashed in a module-level
 `jobs: dict` keyed by a random UUID so the PDF can be downloaded later via
 `GET /pdf/{job_id}`.
+
+---
+
+## 1.5. Stage 0 — Image analysis & filter routing (`image_analysis.py`, `filter_profiles.py`)
+
+**Why.** One fixed set of filters can't serve every photo. The backdrop-unify +
+mean-shift recipe that cleans up a **studio portrait** (neutral wall) actively
+*hurts* a **busy scene** (a wedding in front of flowers) — it leaves the subject
+muddy and washed-out. So before any filtering, we measure the image and choose a
+recipe tailored to it.
+
+**Step 1 — measure** (`analyze_image`). A handful of cheap, normalized metrics:
+
+| Metric | What it captures | ktyb | wedding |
+|--------|------------------|------|---------|
+| `colorfulness` | Hasler–Süsstrunk color richness | 0.24 | 0.39 |
+| `busyness` | Canny edge density (detail/clutter) | 0.03 | 0.09 |
+| `border_saturation` | how colorful the outer frame is (neutral backdrop?) | 0.13 | 0.31 |
+| `mean_saturation` | overall vividness | 0.23 | 0.30 |
+| `contrast` | luminance P95−P5 (gates the tone lift) | 0.64 | 0.72 |
+| `brightness` | mean luminance (sets tone-lift gamma) | 0.47 | 0.45 |
+| `aspect_ratio` | reserved for future crop logic | — | — |
+
+**Step 2 — route** (`select_profile`) to one of three profiles:
+
+```
+  neutral border + low colorfulness + low busyness ─▶ studio_portrait
+  colorful OR busy OR colorful border              ─▶ busy_scene
+  otherwise                                        ─▶ default
+```
+
+**Step 3 — build the recipe** (`build_recipe`). The stack is deliberately **small
+and orthogonal** — three steps, each doing one thing, none fighting the others:
+
+| Profile | Recipe |
+|---------|--------|
+| *(all profiles)* | `tone_lift(gamma)` **first, if `contrast` < 0.52** — a *global* exposure fix for dull/low-key shots; darker images get a stronger (lower-gamma) lift, always gently clamped |
+| `studio_portrait` | … → `unify_background` → `mean_shift(sp=19, sr=30)` |
+| `busy_scene` / `default` | … → `mean_shift(sp=19, sr=30)` |
+
+Why so few steps now (this replaced a 7-filter stack that regressed):
+- **`tone_lift` is a global gamma on LAB lightness, not CLAHE.** CLAHE is *local*
+  contrast; at low stud counts its per-tile equalization overshot into harsh,
+  distorted faces. A global gamma brightens smoothly and can't create local
+  artifacts.
+- **`mean_shift` has one fixed, moderate `sr`** and runs at the fixed working
+  resolution (below), so its effect no longer depends on the stud count.
+- **Color handling lives in ONE place** — the chroma bias inside
+  `color_palette.match_image` (Stage 3) keeps neutrals neutral and colors vivid.
+  There is no separate saturation step to fight it.
+
+Filters live in `filters.py` as small composable functions; `apply_recipe` runs
+the chosen steps in order. Cleanup (Stage 3.5) always runs afterward, on the grid.
+
+**Resolution robustness.** Preprocessing always runs at a **fixed working size**
+(`processor.WORK_SIZE`, long side 512 px), regardless of the requested stud count —
+so the filters see the same image whether the user asks for 48 or 96 studs; only
+the final downsample differs. (Previously the working size scaled with the stud
+grid, so a 48-stud request hit every filter twice as hard as a 96-stud one — that
+is what made low-res outputs collapse into grey mush / harsh faces.)
+
+**Transparency.** The chosen profile, metrics, and exact steps are returned in the
+API response under `preprocessing`:
+
+```json
+"preprocessing": {
+  "profile": "studio_portrait",
+  "metrics": { "colorfulness": 0.22, "contrast": 0.46, ... },
+  "steps": [ {"filter": "tone_lift", "params": {"gamma": 0.762}},
+             {"filter": "unify_background", "params": {}},
+             {"filter": "mean_shift", "params": {"sp": 19, "sr": 30}} ]
+}
+```
+
+> **Guard rail.** `test_pipeline.py` asserts a studio image routes to
+> `studio_portrait` (incl. `unify_background`), a busy image routes to
+> `busy_scene` (no backdrop-unify), and a dark image gets `tone_lift` — so tuning
+> one path can't silently regress another. `tools/contact_sheet.py` renders every
+> input at 48/64/96 into one labeled sheet so regressions are caught by eye.
+> Thresholds live as constants in
+> `filter_profiles.py`, calibrated against ktyb.jpg vs wedding.JPG.
 
 ---
 
@@ -111,6 +207,96 @@ values — still *any* color, not yet LEGO colors.
 
 ---
 
+## 3.4. Stage 2.4 — Background unification (`background.py`) — *the shadow fix*
+
+**The problem.** A photo's backdrop is rarely one flat color — uneven lighting
+leaves a shadow or vignette on the wall. The eye reads "one grey wall," but the
+LEGO palette has only a few discrete greys and color-matching is a *hard
+threshold*. Where the lighting crosses the midpoint between two palette greys, the
+backdrop snaps — the lit part to one grey, the shadowed part to a darker grey —
+with a hard false seam (a phantom "shadow color"):
+
+```
+  ORIGINAL wall (uneven lighting)            NAIVE NEAREST-COLOR SNAP
+  dark ░▒▒▓▓▓ ─────────► light               ███▓▓▓░░░░░░░░░░░
+       one wall, shaded                      │  └─ hard false seam
+```
+
+**Two approaches that DON'T work** (both tried and rejected against a real photo —
+see the dead-ends note below):
+- *Mean-shift alone* (Stage 2.5): a real shadow is a large, coherent, distinctly
+  darker region, so it forms its own mode and survives. The two greys are ~95
+  apart in RGB — too far to bridge without merging genuine colors.
+- *Flat-field illumination correction*: dividing out the low-frequency lighting
+  can't tell "dark because shadowed" from "dark because the object is black", so
+  a large dark subject (hat/hoodie) creates a bright **halo** and the backdrop
+  gets blotchier, not cleaner.
+
+**The fix that works — treat the whole backdrop as ONE region.** Flood-fill
+inward from the image borders and repaint everything it reaches with a single
+color. Two properties make this robust:
+1. **Floating-range fill** compares each candidate to its already-filled
+   *neighbor*, so a gentle shadow gradient is walked end-to-end, but a sharp
+   subject edge stops it.
+2. A **saturation/value barrier** pre-blocks the fill from entering colorful
+   (skin, hair) or dark (hoodie) pixels — so it stays inside the neutral wall and
+   never leaks into the subject.
+
+```python
+barrier = (saturation > SAT_BARRIER) | (value < VAL_BARRIER)   # subject = no-go
+mask[barrier] = 1                                              # blocks the fill
+for seed in border_points:                                    # flood from edges
+    cv2.floodFill(img, mask, seed, 0, (TOL,)*3, (TOL,)*3, FLOATING_RANGE|MASK_ONLY)
+img[background_mask] = median(img[background_mask])           # repaint one color
+```
+
+| Constant | Meaning | Default |
+|----------|---------|---------|
+| `FLOOD_TOLERANCE` | per-step color tolerance (floating range) | 14 |
+| `SAT_BARRIER` | HSV saturation above this = subject, blocks the fill | 60 |
+| `VAL_BARRIER` | HSV value below this = dark object, blocks the fill | 60 |
+| `MIN_BG_FRACTION` | if less than this is found to be backdrop, do nothing | 0.05 |
+
+> ✅ **Verified on a real photo** (black beret, black hoodie, grey studio wall):
+> the shadow wedge vanished, the backdrop became a single uniform grey, and the
+> subject — including the true-black hat/hoodie — was untouched.
+>
+> ⚠️ **Limitations.** This assumes the backdrop is *neutral* (low-saturation) and
+> *border-connected*. On a colorful or full-bleed background the barriers block
+> the fill, too little background is found, and it safely does nothing. A
+> colorful-wall shadow would not be fixed by this step.
+
+---
+
+## 3.5. Stage 2.5 — Region flattening (`filters.py`)
+
+Mean-shift collapses fine noise and gentle gradients into flat color blocks while
+keeping strong edges (face, hat, glasses) crisp — so the palette match produces
+coherent stud blocks instead of speckle. It is the **single "quantize prep" step**
+and runs for *every* profile (after the backdrop is unified, for studio portraits).
+
+**The filter.** An **edge-preserving mean-shift filter**
+(`cv2.pyrMeanShiftFiltering`) clusters spatially-near, color-similar pixels into
+their shared mean.
+
+```python
+def mean_shift(arr, sp=19, sr=30):          # sp = spatial radius, sr = color radius
+    bgr  = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    flat = cv2.pyrMeanShiftFiltering(bgr, sp=sp, sr=sr)
+    return cv2.cvtColor(flat, cv2.COLOR_BGR2RGB)
+```
+
+`sr` is the main knob — bigger = more merging. It is now **one fixed, moderate
+value** (`sr=30`) for every profile, applied at the fixed working resolution
+(`WORK_SIZE`, 512 px). Previously `sr` scaled with busyness and the work image
+scaled with the stud grid, so a 48-stud request got flattened twice as hard as a
+96-stud one — a big source of the low-res regression.
+
+> ⚠️ **Watch `sr`.** Too large and genuinely-different colors bleed together
+> (e.g. a dark hat merging into a dark hoodie).
+
+---
+
 ## 4. Stage 3 — Color matching (`color_palette.py`)
 
 The palette (`data/lego_colors.json`, **40 real LEGO colors**) is loaded once at
@@ -141,22 +327,31 @@ is designed to model perceptual distance.
 
 ### What the code actually does
 
-`match_image(pixels)`:
-1. Flatten `(H, W, 3)` → `(H·W, 3)`.
-2. Convert **all** pixels to Lab in one vectorized call.
-3. **Loop over every pixel one at a time**, computing ΔE00 against all 40
-   palette colors and taking the `argmin`.
-4. Reshape the winning IDs back to `(H, W)`.
+`match_image(pixels)` is **fully vectorized** — one broadcast ΔE00 call scores
+every pixel against all 40 colors at once, then `argmin` picks the nearest:
 
-```
-for i in range(flat.shape[0]):          # H·W iterations
-    distances = delta_E(flat_lab[i], self.lab_array, method="CIE 2000")
-    result_ids[i] = self.colors[argmin(distances)]["id"]
+```python
+distances = delta_E(flat_lab[:, None, :], lab_array[None, :, :], method="CIE 2000")
+distances += chroma_bias * relu(palette_chroma - source_chroma)   # see below
+nearest   = np.argmin(distances, axis=1)
 ```
 
-> ⚠️ **This per-pixel Python loop is the #1 performance hotspot.** A 96×96 mosaic
-> is 9,216 pixels, and each iteration calls the (relatively expensive) CIE 2000
-> function. See [Improvements](#7-where-we-can-improve).
+This replaced a per-pixel Python loop (the old #1 hotspot) — a 96×96 match went
+from several seconds to **~0.2 s**.
+
+**Chroma bias — avoiding false vivid blobs.** A faintly-tinted grey (a night
+stadium wall, a shadow) can be perceptually *closest* to a saturated palette color
+like Medium Lavender, and snap to a jarring purple blob. The `chroma_bias` term
+(`CHROMA_BIAS = 0.25`) adds a penalty for choosing a palette color **more saturated
+than the source pixel**, so near-neutral pixels stay neutral. Genuinely colorful
+pixels are unaffected (their `palette_chroma − source_chroma` is ≤ 0). This removes
+the messi purple artifacts.
+
+> ⚠️ **Keep it small.** At `0.6` this over-fired at low stud counts: downsampling
+> to 48 studs averages colorful detail into soft, desaturated pixels, and a strong
+> bias shoved those (e.g. pink flowers blended with foliage) all the way to grey —
+> collapsing the whole wedding scene into grey mush. `0.25` still neutralizes
+> faint-tinted greys while letting soft pinks/greens stay colorful.
 
 Output: `color_grid`, an `(H, W)` array where every cell is a LEGO color ID.
 
@@ -171,6 +366,37 @@ Output: `color_grid`, an `(H, W)` array where every cell is a LEGO color ID.
   │12│ 7│ 7│ 7│ 7│ 7│
   └──┴──┴──┴──┴──┴──┘
 ```
+
+---
+
+## 4.5. Stage 3.5 — Speckle cleanup (`grid_cleanup.py`)
+
+Even after flattening, color-matching can leave stray studs. `clean_grid` does a
+**single pass** over the color-ID grid that snaps a stud to its dominant neighbor
+color when **either** of two rules fires:
+
+```
+  before            after (isolated 7 snapped to 5)
+  ┌──┬──┬──┐        ┌──┬──┬──┐
+  │ 5│ 5│ 5│        │ 5│ 5│ 5│
+  │ 5│ 7│ 5│  ───▶  │ 5│ 5│ 5│      the lone 7 had 0 same-color
+  │ 5│ 5│ 5│        │ 5│ 5│ 5│      neighbors → replaced
+  └──┴──┴──┘        └──┴──┴──┘
+```
+
+1. **Isolated speckle** — fewer than `MIN_SAME_NEIGHBORS` (default 1, i.e. *zero*)
+   neighbors share its color. Tuned deliberately: at threshold 2, 1-stud-tall
+   features (glasses frames, lips) got erased; at 1 they survive while scattered
+   flecks are still removed.
+2. **Perceptual outlier** — the stud is weakly-supported (≤ 2 same-color neighbors)
+   **and** far in color (ΔE > 25) from its dominant neighbor. This catches a lone
+   *wrong* fleck (a red stud on a cheek) that rule 1 keeps because it isn't fully
+   isolated, while leaving genuine small features (close in color to their
+   surroundings) alone. It reuses the palette's precomputed pairwise ΔE matrix, so
+   each check is an O(1) lookup.
+
+(Previously these were two separate passes — `despeckle` + `remove_color_outliers`
+— now folded into one `clean_grid` pass.)
 
 ---
 
@@ -320,17 +546,19 @@ Key details:
 
 Ordered roughly by impact-to-effort.
 
-### 🔴 Performance — vectorize color matching
-`color_palette.match_image` loops over every pixel in Python. For a 96×96 mosaic
-that is ~9,200 sequential `delta_E` calls. `colour.delta_E` supports
-broadcasting, so the whole grid can be matched in a handful of array operations:
+### ✅ Performance — vectorized color matching *(done)*
+`match_image` now scores the whole grid against all colors in one broadcast
+`delta_E` call + `argmin` (see [Stage 3](#4-stage-3--color-matching-color_palettepy)).
+A 96×96 match dropped from several seconds to ~0.2 s; mean-shift is now the main
+cost. The whole pipeline runs a 96² in ~2–5 s depending on profile.
 
-- Compute `flat_lab` `(N, 3)` once (already done).
-- Broadcast against `lab_array` `(40, 3)` → distances `(N, 40)` in one call.
-- `argmin(axis=1)` → all winning indices at once.
-
-Expected: **10–100× faster** matching, and simpler code. This is the single
-biggest win.
+### 🟡 Content-adaptive follow-ups (from the messi / ala test images)
+- **Smart crop** — a busy full-body scene (wedding) is still hurt by the
+  center-crop cutting the subject; saliency/face-aware crop is the next lever
+  (deliberately deferred).
+- **Palette gaps** — very dark or unusual tones still band a little; a curated or
+  expanded neutral/dark palette would help the hardest images beyond what the
+  chroma bias fixes.
 
 ### 🟠 Determinism — seed or remove randomness
 `brick_fitter` uses unseeded `random`, so results are irreproducible (hard to
@@ -351,11 +579,26 @@ Job results (including PDFs) live in a module-level dict. They vanish on restart
 and leak memory forever (nothing is ever evicted). For anything beyond a demo,
 move to Redis / a DB / temp files with a TTL, and add cleanup.
 
-### 🟡 Color accuracy — dithering
-Flat nearest-color mapping produces visible banding on gradients (skies,
-skin tones). Adding **Floyd–Steinberg dithering** before/at the matching step
-would diffuse quantization error and dramatically improve perceived quality on
-photographic images.
+### ✅ Shadow banding — *implemented (backdrop unify + mean-shift + despeckle)*
+A shadow splitting the backdrop into two greys with a hard seam is now handled by
+three stages: **2.4** background unification (repaints the backdrop one color —
+the primary fix), **2.5** mean-shift (flattens the subject), **3.5** despeckle
+(stray studs). Verified on a real photo (see `results/ktyb_before.png` vs
+`results/ktyb_after.png`).
+
+**Dead-ends (tried, rejected — don't re-attempt without new ideas):**
+- *Raising the mean-shift color radius* — doesn't merge a coherent shadow (the
+  two greys are too far apart in color).
+- *Flat-field illumination correction* — creates a bright halo around large dark
+  subjects; made the real photo worse, not better.
+
+**Remaining follow-ups:**
+- Background unification only helps a *neutral, border-connected* backdrop. A
+  colorful-wall shadow needs a different approach (e.g. GrabCut / ML matting to
+  segment foreground).
+- Consider **Floyd–Steinberg dithering** as an *alternative* philosophy for the
+  subject — diffuses quantization error into a gradual blend (better for
+  skies/skin, but adds speckle texture).
 
 ### 🟡 Bag boundary bricks
 Bricks are bagged by their top-left corner and can straddle a section boundary.

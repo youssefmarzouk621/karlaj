@@ -1,6 +1,6 @@
 # Running the app
 
-This repo has three runnable pieces: a Python backend, a Next.js frontend, and a Next.js dashboard. The dashboard also depends on infra services (MySQL + Keycloak) started via Docker Compose.
+This repo has five runnable pieces: a Python backend, a Python `mosaic-generator` service, a Next.js frontend, a Next.js dashboard, and `brickmos` (a vendored third-party Lego-mosaic generator with an added HTTP service). The dashboard also depends on infra services (MySQL + Keycloak) started via Docker Compose.
 
 ## Backend (FastAPI, port 8000)
 
@@ -20,6 +20,38 @@ npm run dev
 ```
 
 Open http://localhost:3000. Talks to the backend at `http://localhost:8000` (override with `PYTHON_API_URL`).
+
+## mosaic-generator (FastAPI, port 8002)
+
+Fast in-house mosaic service — same color/shading result as `brickmos` (33-color BrickLink palette, Euclidean-RGB nearest match, no flattening preprocessing) but with a vectorized matcher, so generation is a few milliseconds. Uses its own `venv`.
+
+```bash
+cd mosaic-generator
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt   # first time only
+uvicorn main:app --reload --port 8002
+```
+
+Serves `POST /process` and `GET /pdf/{job_id}` (same shape as the backend, so the frontend can point at it via `PYTHON_API_URL`); docs at http://localhost:8002/docs.
+
+## brickmos service (FastAPI, port 8001)
+
+Vendored fork of [merschformann/brickmos](https://github.com/merschformann/brickmos) with an added FastAPI upload service. Note it uses its own `.venv` (not `venv`) and its deps are managed by `pyproject.toml`, not `requirements.txt`.
+
+```bash
+cd brickmos
+source .venv/bin/activate
+pip install -e ".[service]"   # first time only — installs brickmos + the "service" extra (fastapi, uvicorn, ...)
+python run_service.py --port 8001 [--reload]
+```
+
+Serves `POST /process` and `GET /pdf/{job_id}` (mirrors the backend's API); interactive docs at http://localhost:8001/docs.
+
+One-off CLI conversion (no service, just writes an output image + BrickLink parts list):
+
+```bash
+python run.py --image_file data/iron-man-portrait.jpg --output_directory=temp
+```
 
 ## Dashboard (Next.js, port 3002)
 

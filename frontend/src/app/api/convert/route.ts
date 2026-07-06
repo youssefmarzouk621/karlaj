@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const PYTHON_API = process.env.PYTHON_API_URL ?? "http://localhost:8000";
+import { getMosaicServiceUrl } from "@/lib/mosaicService";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
-  const res = await fetch(`${PYTHON_API}/process`, {
+  const res = await fetch(`${getMosaicServiceUrl()}/process`, {
     method: "POST",
     body: formData,
   });

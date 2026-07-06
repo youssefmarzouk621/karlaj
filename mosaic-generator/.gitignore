@@ -1,0 +1,14 @@
+# Virtual environments
+venv/
+.venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Generated output & scratch
+results/
+*.pdf
+
+# OS / editor
+.DS_Store

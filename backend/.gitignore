@@ -28,6 +28,7 @@ htmlcov/
 
 # Generated output & scratch files
 results/
+inputs/
 *.pdf
 uploads/
 tmp/
