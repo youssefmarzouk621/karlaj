@@ -5,7 +5,7 @@ import Link from "next/link";
 import Stepper from "@/components/Stepper";
 import ImageUpload from "@/components/ImageUpload";
 import SizeSelector from "@/components/SizeSelector";
-import MosaicPreview from "@/components/MosaicPreview";
+import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import PartsList from "@/components/PartsList";
 
 interface Placement {
@@ -221,7 +221,9 @@ export default function CreatePage() {
             </p>
           </div>
 
-          <MosaicPreview
+          <BeforeAfterSlider
+            key={result.job_id}
+            beforeSrc={preview ?? ""}
             gridRows={result.height}
             gridCols={result.width}
             placements={result.placements}

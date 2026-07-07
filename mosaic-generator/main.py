@@ -61,8 +61,10 @@ async def process(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 
+    # Merge same-color studs into larger plates. Returns the (lightly cleaned)
+    # grid the bricks were built from, so `grid` and `placements` agree.
+    placements, index_grid = fit_bricks(index_grid, palette)
     grid = index_grid_to_color_grid(index_grid, palette)
-    placements = fit_bricks(index_grid, palette)
     parts_list = build_parts_list(placements)
     bags = organize_bags(placements, width, height)
 

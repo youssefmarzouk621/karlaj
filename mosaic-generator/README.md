@@ -47,14 +47,30 @@ Docs: http://localhost:8002/docs
 |------|------|
 | `palette.py` | 33 BrickLink colors + vectorized nearest-color matcher |
 | `mosaic.py` | decode / center-crop / resize / quantize → index grid |
-| `bricks.py` | grid → placements + parts list (**1×1 today**; the seam for larger bricks) |
+| `bricks.py` | grid → placements + parts list, merging same-color runs into plates |
 | `bags.py` | split into build sections |
 | `pdf.py` | preview + BrickLink BOM PDF |
 | `main.py` | FastAPI wiring |
 
+## Bricks & the 1×1 cap
+
+`bricks.fit_bricks` merges same-color studs into LEGO plates (1×2 … 2×4) while
+keeping **1×1 ≤ 35% of parts**, without changing the colors:
+
+1. **Light cleanup** — only *fully isolated* studs (a lone color with no
+   same-color neighbor) are snapped to their dominant neighbor. That's
+   salt-and-pepper noise, not shading, so the brickmos-style richness is kept;
+   it also removes unmergeable 1×1s.
+2. **Largest-brick-under-cap** — greedily tile with the *biggest* plate catalog
+   whose 1×1 share is ≤ 35%. Bigger bricks mean fewer total parts, which *raises*
+   the 1×1 fraction, so a very busy image falls back to a smaller-plate catalog
+   (more parts) that keeps the unavoidable isolated 1×1s under the limit.
+
+Measured on the sample photos: 1×1 lands at **20–34%** with a healthy mix of
+1×2/1×3/1×4/2×2/2×3/2×4, colors identical to the 1×1-only output.
+
 ## Roadmap
 
-**Next step:** larger bricks. Only `bricks.fit_bricks` changes — it will merge
-adjacent same-color studs into 1×2 / 2×2 / … parts. The palette, matching, API,
-PDF and bag logic already handle variable-size placements
-(`brick_width`/`brick_height`), so nothing else moves.
+- **Done:** larger bricks with the 1×1 cap (above).
+- Possible next: bias tiling to favor 2×N over 1×N for sturdier builds; expose the
+  cap / catalog as request parameters; user-constrained palette (colors you own).

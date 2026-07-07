@@ -1,25 +1,53 @@
-"""Split the mosaic into rectangular build sections ("bags"). Ported from the
-brickmos service so the API response matches the other services."""
+"""Split the mosaic into rectangular build sections ("bags").
+
+Real LEGO sets don't dump every piece into a handful of huge bags — each
+numbered bag builds one manageable chunk of the model, usually on the order of
+~50–90 parts. We mirror that: pick the bag count from a target parts-per-bag,
+then carve the mosaic into that many contiguous rectangular sections, numbered
+row by row so they build top-to-bottom, left-to-right."""
 
 from __future__ import annotations
 
 import math
 
-MAX_BAGS = 6
+# Target pieces in a single bag. Tuned to feel like a real LEGO bag: enough to
+# be a satisfying sub-build, few enough that sorting them isn't a chore.
+TARGET_PARTS_PER_BAG = 70
+MAX_BAGS = 18
+MIN_BAGS = 1
+
+
+def _grid_shape(n_bags: int, width: int, height: int) -> tuple[int, int]:
+    """Pick n_rows × n_cols close to `n_bags` while keeping each section as
+    square as the mosaic's aspect ratio allows."""
+    if n_bags <= 1 or width <= 0 or height <= 0:
+        return 1, 1
+
+    best: tuple[float, int, int] | None = None
+    for n_rows in range(1, n_bags + 1):
+        n_cols = math.ceil(n_bags / n_rows)
+        total = n_rows * n_cols
+        if total > MAX_BAGS:
+            continue
+        # Cell aspect vs. square (1.0 is ideal); penalise overshooting n_bags.
+        cell_ratio = (width / n_cols) / (height / n_rows)
+        squareness = max(cell_ratio, 1 / cell_ratio)
+        overshoot = total - n_bags
+        score = squareness + overshoot * 0.15
+        if best is None or score < best[0]:
+            best = (score, n_rows, n_cols)
+
+    return (best[1], best[2]) if best else (1, 1)
 
 
 def organize_bags(placements: list[dict], width: int, height: int) -> list[dict]:
-    if width <= 24 and height <= 24:
-        n_cols, n_rows = 1, 1
-    elif width <= 48 and height <= 48:
-        n_cols, n_rows = 2, 2
-    else:
-        n_cols = min(3, math.ceil(width / 24))
-        n_rows = min(2, math.ceil(height / 24))
+    total_parts = len(placements)
+    if total_parts == 0:
+        return []
 
-    if n_cols * n_rows > MAX_BAGS:
-        n_cols = min(n_cols, 3)
-        n_rows = min(n_rows, 2)
+    n_bags_target = math.ceil(total_parts / TARGET_PARTS_PER_BAG)
+    n_bags_target = max(MIN_BAGS, min(MAX_BAGS, n_bags_target))
+    n_rows, n_cols = _grid_shape(n_bags_target, width, height)
 
     col_splits = [round(width * i / n_cols) for i in range(n_cols + 1)]
     row_splits = [round(height * i / n_rows) for i in range(n_rows + 1)]
