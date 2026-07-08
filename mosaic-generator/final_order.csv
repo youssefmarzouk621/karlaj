@@ -1,0 +1,31 @@
+source,seller_code_or_target,covers_palette_colors,qty_kg,cost_tnd
+THIS_SELLER,107,Dark Turquoise,1,32.46
+THIS_SELLER,138,Dark Tan; Olive Green,1,32.46
+THIS_SELLER,179,Dark Bluish Gray,1,32.46
+THIS_SELLER,192,Reddish Brown,1,32.46
+THIS_SELLER,212,Medium Azure; Medium Blue,1,32.46
+THIS_SELLER,226,Yellow,1,32.46
+THIS_SELLER,24,Bright Light Orange,1,32.46
+THIS_SELLER,26,Black; Dark Blue,1,32.46
+THIS_SELLER,268,Dark Purple,1,32.46
+THIS_SELLER,28,Green,1,32.46
+THIS_SELLER,297,Dark Orange,1,32.46
+THIS_SELLER,29B,Blue,1,32.46
+THIS_SELLER,5,Lime,1,32.46
+THIS_SELLER,72,Medium Nougat,1,32.46
+THIS_SELLER,79,Dark Green,1,32.46
+THIS_SELLER,A08,Tan,1,32.46
+THIS_SELLER,B01,Light Bluish Gray,1,32.46
+THIS_SELLER,B03,Medium Lavender,1,32.46
+THIS_SELLER,B04,Dark Pink,1,32.46
+THIS_SELLER,B20,Orange,1,32.46
+THIS_SELLER,B39,Bright Light Blue,1,32.46
+THIS_SELLER,B41,Bright Green,1,32.46
+THIS_SELLER,B45,Sand Blue,1,32.46
+OTHER_SELLER,#FFFFFF,White,1,
+OTHER_SELLER,#6A0E15,Dark Red,1,
+OTHER_SELLER,#B30006,Red,1,
+OTHER_SELLER,#F1E167,Bright Light Yellow,1,
+OTHER_SELLER,#DFEEA5,Yellowish Green,1,
+OTHER_SELLER,#4997FA,Dark Azure,1,
+OTHER_SELLER,#FFBBFF,Bright Pink,1,

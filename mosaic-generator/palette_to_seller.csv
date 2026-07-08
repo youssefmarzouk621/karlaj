@@ -1,0 +1,34 @@
+palette_name,bricklink_id,palette_hex,seller_code,seller_hex,distance,confidence
+White,1,#FFFFFF,A08,#E6BEA1,117.0,WEAK-verify
+Light Bluish Gray,86,#AFB5C7,B01,#B9AAD6,21.1,good
+Dark Bluish Gray,85,#595D60,179,#4B5454,20.5,good
+Black,11,#212121,26,#212934,20.6,good
+Dark Red,59,#6A0E15,B16e,#532E2B,45.1,WEAK-verify
+Red,5,#B30006,B19-1,#DC3416,68.1,WEAK-verify
+Reddish Brown,88,#582A12,192,#573527,23.7,good
+Tan,2,#DEC69C,A08,#E6BEA1,12.4,good
+Dark Tan,69,#907450,138,#757248,28.2,ok
+Medium Nougat,150,#E3A05B,72,#C3945D,34.2,ok
+Dark Orange,68,#B35408,297,#8F630F,39.6,ok
+Orange,4,#FF7E14,B20,#E5830C,27.7,ok
+Bright Light Orange,110,#F7BA30,24,#ECC206,44.1,ok
+Yellow,3,#F7D117,226,#E5D40D,20.8,good
+Bright Light Yellow,103,#F1E167,B27,#E5B27E,53.7,WEAK-verify
+Yellowish Green,158,#DFEEA5,A08,#E6BEA1,48.7,WEAK-verify
+Lime,34,#A6CA55,5,#BAB35A,30.9,ok
+Olive Green,155,#7F8F56,138,#757248,33.7,ok
+Dark Green,80,#2E5543,79,#2C3949,28.7,ok
+Green,6,#00642E,28,#066F2C,12.7,good
+Bright Green,36,#10CB31,B41,#0EBC0B,40.9,ok
+Dark Turquoise,39,#008A80,107,#076B70,35.6,ok
+Dark Blue,63,#143044,26,#212934,21.8,good
+Blue,7,#0057A6,29B,#0E58AF,16.7,good
+Dark Azure,153,#4997FA,212,#6FAAEA,45.4,WEAK-verify
+Medium Azure,156,#5FBDF7,212,#6FAAEA,28.0,ok
+Medium Blue,42,#61AFFF,212,#6FAAEA,25.7,ok
+Bright Light Blue,105,#A4C2E6,B39,#8CB3D7,32.0,ok
+Sand Blue,55,#5A7184,B45,#63757A,14.0,good
+Dark Purple,89,#5F2683,268,#3B2C8C,37.6,ok
+Medium Lavender,157,#885E9E,B03,#9B6F96,26.7,ok
+Dark Pink,47,#C87080,B04,#CC6695,23.6,good
+Bright Pink,104,#FFBBFF,222,#D593D5,71.6,WEAK-verify

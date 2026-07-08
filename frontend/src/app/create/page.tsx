@@ -1,12 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import Stepper from "@/components/Stepper";
 import ImageUpload from "@/components/ImageUpload";
 import SizeSelector from "@/components/SizeSelector";
+import SizePreview from "@/components/SizePreview";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
-import PartsList from "@/components/PartsList";
+import RoomMockups from "@/components/RoomMockups";
+import FrameMockups from "@/components/FrameMockups";
+
+// WebGL can't render on the server, so load the 3D view client-only.
+const Mosaic3D = dynamic(() => import("@/components/Mosaic3D"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[360px] items-center justify-center rounded-xl border border-border-custom bg-surface text-sm text-muted">
+      Loading 3D preview…
+    </div>
+  ),
+});
 
 interface Placement {
   part_id: string;
@@ -166,24 +179,15 @@ export default function CreatePage() {
               }}
             />
 
-            <div>
-              <p className="text-xs text-muted mb-2">Crop preview</p>
-              <div
-                className="w-full rounded-xl border border-border-custom bg-surface overflow-hidden"
-                style={{ aspectRatio: `${width} / ${height}` }}
-              >
-                {preview && (
-                  <img
-                    src={preview}
-                    alt="Crop preview"
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
-              <p className="text-xs text-muted mt-2">
-                {width}&times;{height} studs
-              </p>
-            </div>
+            <SizePreview
+              preview={preview}
+              width={width}
+              height={height}
+              onChange={(w, h) => {
+                setWidth(w);
+                setHeight(h);
+              }}
+            />
           </div>
 
           {error && <p className="text-accent text-center text-sm">{error}</p>}
@@ -214,37 +218,74 @@ export default function CreatePage() {
       {step === 2 && result && (
         <section className="space-y-8">
           <div>
-            <h2 className="text-xl font-bold mb-1">Your LEGO kit is ready</h2>
+            <h2 className="text-xl font-bold mb-1">Your LEGO mosaic is ready</h2>
             <p className="text-muted text-sm">
-              Review the mosaic preview and parts list below, then download
-              the instruction booklet to start building.
+              Spin the 3D model, picture it on your wall, and compare it with
+              your photo. The full parts list and bag-by-bag steps come in the
+              printed manual and the downloadable PDF.
             </p>
           </div>
 
-          <BeforeAfterSlider
+          {/* 3D model of the finished mosaic */}
+          <Mosaic3D
             key={result.job_id}
-            beforeSrc={preview ?? ""}
             gridRows={result.height}
             gridCols={result.width}
             placements={result.placements}
             colorMap={colorMap}
           />
 
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Parts &amp; bags</h3>
-            <a
-              href={`/api/pdf/${result.job_id}`}
-              download
-              className="bg-accent hover:bg-accent-hover text-white font-medium px-5 py-2 rounded-lg transition-colors text-sm"
-            >
-              Download instruction PDF
-            </a>
+          {/* See it in your space — photo frames for 32×32, drawn scenes otherwise */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">See it in your space</h3>
+            {result.width === 32 && result.height === 32 ? (
+              <FrameMockups
+                gridRows={result.height}
+                gridCols={result.width}
+                placements={result.placements}
+                colorMap={colorMap}
+              />
+            ) : (
+              <RoomMockups
+                gridRows={result.height}
+                gridCols={result.width}
+                placements={result.placements}
+                colorMap={colorMap}
+              />
+            )}
           </div>
-          <PartsList
-            partsList={result.parts_list}
-            bags={result.bags}
-            totalParts={result.total_parts}
-          />
+
+          {/* Compact before/after + download */}
+          <div className="grid gap-6 sm:grid-cols-2 sm:items-start">
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Before &amp; after</h3>
+              <div className="mx-auto max-w-xs sm:mx-0">
+                <BeforeAfterSlider
+                  key={result.job_id}
+                  beforeSrc={preview ?? ""}
+                  gridRows={result.height}
+                  gridCols={result.width}
+                  placements={result.placements}
+                  colorMap={colorMap}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border-custom bg-surface p-5">
+              <h3 className="text-lg font-semibold mb-1">Ready to build</h3>
+              <p className="text-muted text-sm mb-4">
+                Your box ships with a printed step-by-step manual and the full
+                parts list. Grab the same guide as a PDF here.
+              </p>
+              <a
+                href={`/api/pdf/${result.job_id}`}
+                download
+                className="inline-block bg-accent hover:bg-accent-hover text-white font-medium px-5 py-2.5 rounded-lg transition-colors text-sm"
+              >
+                Download instruction PDF
+              </a>
+            </div>
+          </div>
 
           <div className="flex gap-3 pt-2">
             <button
