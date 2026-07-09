@@ -123,11 +123,11 @@ export default function Mosaic3D({
   const maxDim = Math.max(gridRows, gridCols);
 
   return (
-    <div className="relative h-[360px] w-full overflow-hidden rounded-xl border border-border-custom bg-gradient-to-b from-[#f4f5f8] to-[#e4e6ec] dark:from-[#1a1c22] dark:to-[#0e0f13]">
+    <div className="relative h-[360px] w-full overflow-hidden rounded-xl border border-border-custom bg-bg">
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
-        camera={{ position: [0, maxDim * 0.85, maxDim * 1.05], fov: 34 }}
+        camera={{ position: [0, maxDim * 0.92, maxDim * 0.68], fov: 34 }}
       >
         <ambientLight intensity={0.7} />
         <directionalLight
@@ -154,7 +154,7 @@ export default function Mosaic3D({
         <OrbitControls
           makeDefault
           autoRotate
-          autoRotateSpeed={0.7}
+          autoRotateSpeed={0.35}
           enablePan={false}
           enableDamping
           minDistance={maxDim * 0.5}
