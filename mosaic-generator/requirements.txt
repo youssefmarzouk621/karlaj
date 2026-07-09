@@ -4,3 +4,6 @@ python-multipart==0.0.20
 numpy==1.26.4
 opencv-python-headless==4.11.0.86
 reportlab==4.2.5
+PyMySQL==1.1.1
+cryptography==44.0.0
+python-dotenv==1.0.1

@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
-
-export const prisma = globalForPrisma.prisma || new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// The Prisma client + all generated types now live in the shared @lego/database
+// package (one schema for the whole platform). Re-exported here so existing
+// imports (`@/lib/db`) keep working unchanged.
+export { prisma, default } from "@lego/database";
+export * from "@lego/database";

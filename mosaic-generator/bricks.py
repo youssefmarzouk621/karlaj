@@ -29,39 +29,51 @@ from palette import Palette
 
 MAX_1X1_FRACTION = 0.35
 
-# BrickLink plate ids, keyed by canonical (short_side, long_side).
-_PLATES: dict[tuple[int, int], tuple[str, str]] = {
-    (1, 1): ("3024", "1x1 Plate"),
-    (1, 2): ("3023", "1x2 Plate"),
-    (1, 3): ("3623", "1x3 Plate"),
-    (1, 4): ("3710", "1x4 Plate"),
-    (2, 2): ("3022", "2x2 Plate"),
-    (2, 3): ("3021", "2x3 Plate"),
-    (2, 4): ("3020", "2x4 Plate"),
-}
-
-# Catalogs from most to least aggressive. `fit_bricks` uses the first (biggest
-# bricks / fewest parts) that keeps 1x1s under the cap.
-_CATALOGS: list[list[tuple[int, int]]] = [
-    [(2, 4), (2, 3), (2, 2), (1, 4), (1, 3), (1, 2), (1, 1)],   # full
-    [(2, 2), (1, 2), (1, 1)],                                   # medium
-    [(1, 2), (1, 1)],                                           # minimal
+# Fallback parts (the 7 standard plates) used only when the DB has no parts.
+# Same shape as db.load_parts(): width, height, BrickLink part_id, name, variable.
+DEFAULT_PARTS: list[dict] = [
+    {"width": 1, "height": 1, "part_id": "3024", "name": "1x1 Plate", "variable": MAX_1X1_FRACTION},
+    {"width": 1, "height": 2, "part_id": "3023", "name": "1x2 Plate", "variable": None},
+    {"width": 1, "height": 3, "part_id": "3623", "name": "1x3 Plate", "variable": None},
+    {"width": 1, "height": 4, "part_id": "3710", "name": "1x4 Plate", "variable": None},
+    {"width": 2, "height": 2, "part_id": "3022", "name": "2x2 Plate", "variable": None},
+    {"width": 2, "height": 3, "part_id": "3021", "name": "2x3 Plate", "variable": None},
+    {"width": 2, "height": 4, "part_id": "3020", "name": "2x4 Plate", "variable": None},
 ]
 
+Brick = tuple[int, int, str, str]  # (brick_height, brick_width, part_id, name)
 
-def _expand(catalog: list[tuple[int, int]]) -> list[tuple[int, int, str, str]]:
-    """Turn base shapes into concrete (height, width, part_id, name) orientations,
-    largest area first (deterministic tie-break)."""
-    out: list[tuple[int, int, str, str]] = []
-    for w, h in catalog:
-        part_id, name = _PLATES[(min(w, h), max(w, h))]
-        for bh, bw in {(h, w), (w, h)}:            # both orientations
-            out.append((bh, bw, part_id, name))
+
+def _orientations(parts: list[dict]) -> list[Brick]:
+    """Both rotations of every part as concrete (bh, bw, part_id, name),
+    de-duplicated and sorted largest-area first (deterministic tie-break)."""
+    seen: set[tuple[int, int]] = set()
+    out: list[Brick] = []
+    for p in parts:
+        w, h = int(p["width"]), int(p["height"])
+        for bh, bw in {(h, w), (w, h)}:
+            if (bh, bw) in seen:
+                continue
+            seen.add((bh, bw))
+            out.append((bh, bw, p["part_id"], p["name"]))
     out.sort(key=lambda t: (-(t[0] * t[1]), t[0], t[1]))
     return out
 
 
-_EXPANDED = [_expand(cat) for cat in _CATALOGS]
+def _tiers(parts: list[dict]) -> list[list[Brick]]:
+    """Build catalogs from the enabled parts, biggest-first. Tier 0 keeps every
+    shape (fewest parts, highest 1x1 share); each later tier drops the current
+    largest shape (more parts, lower 1x1 share). 1x1 is always retained so single
+    leftover cells are coverable. The final degenerate tier (1x1-only) is last."""
+    have_1x1 = any(p["width"] == 1 and p["height"] == 1 for p in parts)
+    plist = list(parts)
+    if not have_1x1:  # guarantee coverage even if 1x1 was left disabled
+        plist.append({"width": 1, "height": 1, "part_id": "3024", "name": "1x1 Plate"})
+
+    full = _orientations(plist)
+    ones = [o for o in full if o[0] == 1 and o[1] == 1]
+    bigger = [o for o in full if not (o[0] == 1 and o[1] == 1)]  # largest-first
+    return [bigger[k:] + ones for k in range(len(bigger) + 1)]
 
 
 def _despeckle_isolated(grid: np.ndarray) -> np.ndarray:
@@ -127,23 +139,44 @@ def _fraction_1x1(placements: list[dict]) -> float:
     return ones / len(placements)
 
 
-def fit_bricks(index_grid: np.ndarray, palette: Palette,
-               max_1x1_fraction: float = MAX_1X1_FRACTION) -> tuple[list[dict], np.ndarray]:
-    """Merge same-color studs into plates, keeping 1x1s at or under the cap.
+def _cap_from_parts(parts: list[dict]) -> float:
+    """The 1x1 max-fraction cap = the 1x1 part's `variable` (fallback to the
+    module default when absent)."""
+    for p in parts:
+        if p["width"] == 1 and p["height"] == 1 and p.get("variable") is not None:
+            return float(p["variable"])
+    return MAX_1X1_FRACTION
 
-    Returns (placements, grid_used). `grid_used` is the lightly-despeckled index
-    grid the placements were built from — the caller should derive the color grid
-    from it so grid and placements agree.
+
+def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
+               max_1x1_fraction: float | None = None) -> tuple[list[dict], np.ndarray]:
+    """Merge same-color studs into the enabled plates, keeping 1x1s at or under
+    the cap.
+
+    - Only the shapes in `parts` are used.
+    - If 1x1 is the only enabled shape, the artwork is all 1x1 and the cap is
+      ignored (there is nothing to cap against).
+    - Otherwise tile with the largest catalog whose 1x1 share is <= the cap
+      (the 1x1 part's `variable`, or `max_1x1_fraction` if given).
+
+    Returns (placements, grid_used) — `grid_used` is the lightly-despeckled index
+    grid the placements were built from, so the color grid agrees with them.
     """
     grid = _despeckle_isolated(np.asarray(index_grid))
+    cap = max_1x1_fraction if max_1x1_fraction is not None else _cap_from_parts(parts)
 
-    placements = _greedy_fit(grid, palette, _EXPANDED[-1])   # fallback: smallest plates
-    for expanded in _EXPANDED:                               # biggest first
+    tiers = _tiers(parts)
+    if len(tiers) == 1:                          # only 1x1 available -> all 1x1
+        return _greedy_fit(grid, palette, tiers[0]), grid
+
+    usable = tiers[:-1]                          # drop the degenerate 1x1-only tier
+    placements = _greedy_fit(grid, palette, usable[-1])  # fallback: most parts / most diluted
+    for expanded in usable:                      # biggest first
         candidate = _greedy_fit(grid, palette, expanded)
-        if _fraction_1x1(candidate) <= max_1x1_fraction:
-            return candidate, grid                           # largest bricks under the cap
+        if _fraction_1x1(candidate) <= cap:
+            return candidate, grid               # largest bricks under the cap
         placements = candidate
-    return placements, grid                                  # best effort (rare)
+    return placements, grid                      # best effort (rare)
 
 
 def index_grid_to_color_grid(index_grid: np.ndarray, palette: Palette) -> list[list[int]]:

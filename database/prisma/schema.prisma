@@ -1,0 +1,184 @@
+// Shared Prisma schema for the whole LEGO-mosaic platform.
+// Consumed by the dashboard (manages) and the frontend (reads sizes) via the
+// @lego/database package, and read directly over MySQL by the Python
+// mosaic-generator service. One schema, one generated client.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Marketing content (moved verbatim from the dashboard's former schema)
+// ---------------------------------------------------------------------------
+
+model HeroContent {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(255)
+  titleAccent String   @map("title_accent") @db.VarChar(255)
+  subtitle    String   @db.Text
+  ctaText     String   @map("cta_text") @db.VarChar(100)
+  ctaLink     String   @map("cta_link") @db.VarChar(255)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("hero_content")
+}
+
+model Feature {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  icon        String   @db.VarChar(50)
+  sortOrder   Int      @default(0) @map("sort_order")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("features")
+}
+
+model PricingPlan {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  price       String   @db.VarChar(50)
+  period      String   @default("") @db.VarChar(20)
+  description String   @db.Text
+  featured    Boolean  @default(false)
+  ctaText     String   @map("cta_text") @db.VarChar(100)
+  ctaLink     String   @map("cta_link") @db.VarChar(255)
+  sortOrder   Int      @default(0) @map("sort_order")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  features PricingFeature[]
+
+  @@map("pricing_plans")
+}
+
+model PricingFeature {
+  id        String @id @default(uuid())
+  planId    String @map("plan_id")
+  text      String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  plan PricingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("pricing_features")
+}
+
+// ---------------------------------------------------------------------------
+// Mosaic configuration (managed in the dashboard, read by frontend + generator)
+// ---------------------------------------------------------------------------
+
+/// App-wide key/value settings (feature flags etc.), one row per key. E.g.
+/// `custom_size_enabled` = "true"/"false" gates the frontend's free custom-size
+/// inputs and drag-resize. Absent key ⇒ treated as enabled (current behavior).
+model Setting {
+  key       String   @id @db.VarChar(100)
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+/// A selectable mosaic size (in studs). Disabled sizes show as "coming soon".
+model MosaicSize {
+  id        String   @id @default(uuid())
+  width     Int
+  height    Int
+  label     String?  @db.VarChar(100)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([width, height])
+  @@map("mosaic_sizes")
+}
+
+/// A named color palette. Exactly one palette is enabled at a time (enforced
+/// app-side in the dashboard). The generator builds artwork from the enabled one.
+model Palette {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(100)
+  enabled   Boolean  @default(false)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  colors Color[]
+
+  @@map("palettes")
+}
+
+/// A single color in a palette. Stores both hex and r/g/b for convenience.
+model Color {
+  id        String   @id @default(uuid())
+  paletteId String   @map("palette_id")
+  name      String   @db.VarChar(100)
+  hex       String   @db.VarChar(7)
+  r         Int
+  g         Int
+  b         Int
+  code      String?  @db.VarChar(50) // optional supplier code, e.g. "B01"
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  palette   Palette         @relation(fields: [paletteId], references: [id], onDelete: Cascade)
+  inventory InventoryItem[]
+
+  @@index([paletteId])
+  @@map("colors")
+}
+
+/// A brick/plate the generator may use. `variable` on the 1x1 part is the max
+/// fraction of the artwork that may be 1x1 (e.g. 0.35); null elsewhere.
+/// `weightGrams` is the weight of a single piece, used to convert between the
+/// piece count and purchased weight of inventory.
+model Part {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  partId      String   @map("part_id") @db.VarChar(50)
+  width       Int
+  height      Int
+  enabled     Boolean  @default(true)
+  variable    Float?
+  weightGrams Float?   @map("weight_grams")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  inventory InventoryItem[]
+
+  @@unique([width, height])
+  @@map("parts")
+}
+
+/// On-hand stock of a specific brick shape in a specific color. Keyed on
+/// (part, color); each palette is a distinct physical color line, so the FK is
+/// to the per-palette Color row. `quantity` (pieces) and `grams` (weight) are
+/// stored together — the dashboard derives one from the other via the part's
+/// `weightGrams`. The generator will later cap placements by these counts.
+model InventoryItem {
+  id        String   @id @default(uuid())
+  partId    String   @map("part_id") // FK -> Part.id (uuid), not the BrickLink id
+  colorId   String   @map("color_id") // FK -> Color.id
+  quantity  Int      @default(0) // pieces on hand
+  grams     Float    @default(0) // weight on hand (grams)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  part  Part  @relation(fields: [partId], references: [id], onDelete: Cascade)
+  color Color @relation(fields: [colorId], references: [id], onDelete: Cascade)
+
+  @@unique([partId, colorId])
+  @@index([colorId])
+  @@map("inventory_items")
+}

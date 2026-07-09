@@ -17,11 +17,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from palette import Palette
+from palette import Palette, BRICK_COLORS
 from mosaic import image_to_index_grid
-from bricks import index_grid_to_color_grid, fit_bricks, build_parts_list
+from bricks import index_grid_to_color_grid, fit_bricks, build_parts_list, DEFAULT_PARTS
 from bags import organize_bags
 from pdf import generate_pdf
+from db import load_palette_colors, load_parts
 
 app = FastAPI(title="mosaic-generator API")
 
@@ -32,7 +33,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-palette = Palette()
 jobs: dict[str, dict] = {}
 
 MIN_SIZE = 16
@@ -56,14 +56,19 @@ async def process(
     if len(image_bytes) > 20 * 1024 * 1024:
         raise HTTPException(400, "Image must be under 20MB")
 
+    # Load the active config fresh from the DB (so dashboard edits take effect
+    # immediately); fall back to the built-in defaults if the DB is unavailable.
+    palette = Palette(load_palette_colors() or BRICK_COLORS)
+    parts = load_parts() or DEFAULT_PARTS
+
     try:
         index_grid = image_to_index_grid(image_bytes, palette, width, height)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 
-    # Merge same-color studs into larger plates. Returns the (lightly cleaned)
-    # grid the bricks were built from, so `grid` and `placements` agree.
-    placements, index_grid = fit_bricks(index_grid, palette)
+    # Merge same-color studs into larger plates using only the enabled parts.
+    # Returns the (lightly cleaned) grid so `grid` and `placements` agree.
+    placements, index_grid = fit_bricks(index_grid, palette, parts)
     grid = index_grid_to_color_grid(index_grid, palette)
     parts_list = build_parts_list(placements)
     bags = organize_bags(placements, width, height)

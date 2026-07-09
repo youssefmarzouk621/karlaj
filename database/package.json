@@ -1,0 +1,35 @@
+{
+  "name": "@lego/database",
+  "version": "0.0.1",
+  "description": "Shared Prisma schema and client for the LEGO-mosaic platform (dashboard + frontend)",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "prisma"
+  ],
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "npm run generate && tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "db:push": "prisma db push",
+    "db:seed": "node seed/seed.mjs",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "prisma": "^6.19.3",
+    "typescript": "^5"
+  }
+}

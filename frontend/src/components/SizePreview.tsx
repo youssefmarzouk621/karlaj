@@ -3,8 +3,10 @@
 import { useCallback, useRef, useState } from "react";
 import {
   MAX_STUDS,
+  MIN_STUDS,
   clampStuds,
   sizeCm,
+  type SizeOption,
 } from "@/components/SizeSelector";
 
 interface Props {
@@ -12,12 +14,18 @@ interface Props {
   preview: string | null;
   width: number;
   height: number;
+  /** Largest stud dimension the frame represents (the biggest enabled size). */
+  maxStud?: number;
+  /** When false, dragging snaps to the nearest enabled size instead of resizing freely. */
+  customSizeEnabled: boolean;
+  /** The enabled preset sizes to snap to when custom sizing is off. */
+  enabledSizes: SizeOption[];
   onChange: (w: number, h: number) => void;
 }
 
 /**
  * Word-style resizable crop preview. The centered box is the mosaic; the square
- * frame around it represents the maximum size (96×96). Dragging any corner
+ * frame around it represents the maximum enabled size. Dragging any corner
  * handle resizes the box outward/inward from the center, updating the stud
  * count live. Doubles as the crop preview (object-cover, matching the backend's
  * center-crop).
@@ -26,24 +34,44 @@ export default function SizePreview({
   preview,
   width,
   height,
+  maxStud = MAX_STUDS,
+  customSizeEnabled,
+  enabledSizes,
   onChange,
 }: Props) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
   // Map the pointer's distance from the frame center to a stud count. The frame
-  // is square and its half-extent equals MAX_STUDS from the center each way.
+  // is square and its half-extent equals maxStud from the center each way.
   const applyFromPointer = useCallback(
     (clientX: number, clientY: number) => {
       const rect = frameRef.current?.getBoundingClientRect();
       if (!rect || rect.width === 0) return;
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
-      const w = clampStuds((Math.abs(clientX - cx) * 2 * MAX_STUDS) / rect.width);
-      const h = clampStuds((Math.abs(clientY - cy) * 2 * MAX_STUDS) / rect.height);
+      const w = clampStuds((Math.abs(clientX - cx) * 2 * maxStud) / rect.width, MIN_STUDS, maxStud);
+      const h = clampStuds((Math.abs(clientY - cy) * 2 * maxStud) / rect.height, MIN_STUDS, maxStud);
+
+      // Custom sizing off → snap to the nearest enabled preset (drag up/down
+      // through the available sizes) instead of resizing freely.
+      if (!customSizeEnabled && enabledSizes.length) {
+        let best = enabledSizes[0];
+        let bestDist = Infinity;
+        for (const s of enabledSizes) {
+          const d = (s.width - w) ** 2 + (s.height - h) ** 2;
+          if (d < bestDist) {
+            bestDist = d;
+            best = s;
+          }
+        }
+        onChange(best.width, best.height);
+        return;
+      }
+
       onChange(w, h);
     },
-    [onChange]
+    [onChange, maxStud, customSizeEnabled, enabledSizes]
   );
 
   const startDrag = (e: React.PointerEvent) => {
@@ -62,8 +90,8 @@ export default function SizePreview({
   };
 
   const boxStyle = {
-    width: `${(width / MAX_STUDS) * 100}%`,
-    height: `${(height / MAX_STUDS) * 100}%`,
+    width: `${(width / maxStud) * 100}%`,
+    height: `${(height / maxStud) * 100}%`,
     transform: "translate(-50%, -50%)",
     transition: dragging ? "none" : "width 0.22s ease, height 0.22s ease",
   };

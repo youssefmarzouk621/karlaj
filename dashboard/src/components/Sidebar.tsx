@@ -32,6 +32,43 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    label: "Sizes",
+    href: "/dashboard/sizes",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4h4M4 16v4h4M20 8V4h-4M20 16v4h-4" />
+      </svg>
+    ),
+  },
+  {
+    label: "Palettes",
+    href: "/dashboard/palettes",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828L9.828 16" />
+        <circle cx="7" cy="17" r="0.5" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    label: "Parts",
+    href: "/dashboard/parts",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 7v10a1 1 0 001 1h14a1 1 0 001-1V7M4 7l2-3h12l2 3M9 7v4m6-4v4" />
+      </svg>
+    ),
+  },
+  {
+    label: "Inventory",
+    href: "/dashboard/inventory",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10m0-10L4 7v10l8 4" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {

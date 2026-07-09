@@ -1,6 +1,9 @@
 services:
   mysql:
     image: mysql:8.4
+    # Skip reverse-DNS on client connections so TCP handshakes are instant
+    # (otherwise a cold connect can stall several seconds for non-socket clients).
+    command: ["--skip-name-resolve"]
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: brickart

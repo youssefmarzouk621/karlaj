@@ -5,8 +5,8 @@ export const STUD_CM = 0.8;
 export const MIN_STUDS = 16;
 export const MAX_STUDS = 96;
 
-export const clampStuds = (n: number) =>
-  Math.max(MIN_STUDS, Math.min(MAX_STUDS, Math.round(n) || MIN_STUDS));
+export const clampStuds = (n: number, min = MIN_STUDS, max = MAX_STUDS) =>
+  Math.max(min, Math.min(max, Math.round(n) || min));
 
 const cm = (studs: number) => {
   const v = studs * STUD_CM;
@@ -16,22 +16,34 @@ const cm = (studs: number) => {
 export const sizeCm = (w: number, h: number) =>
   w === h ? `${cm(w)} cm` : `${cm(w)}×${cm(h)} cm`;
 
-const PRESETS = [
-  { w: 16, h: 16 },
-  { w: 32, h: 32 },
-  { w: 48, h: 48 },
-  { w: 64, h: 64 },
-  { w: 48, h: 96 },
-  { w: 96, h: 96 },
-];
-
-interface Props {
+/** A size option coming from the database. */
+export interface SizeOption {
   width: number;
   height: number;
+  label: string | null;
+  enabled: boolean;
+}
+
+interface Props {
+  sizes: SizeOption[];
+  width: number;
+  height: number;
+  minStud: number;
+  maxStud: number;
+  /** When false, hide the free width/height inputs — only the presets remain. */
+  customSizeEnabled: boolean;
   onChange: (w: number, h: number) => void;
 }
 
-export default function SizeSelector({ width, height, onChange }: Props) {
+export default function SizeSelector({
+  sizes,
+  width,
+  height,
+  minStud,
+  maxStud,
+  customSizeEnabled,
+  onChange,
+}: Props) {
   return (
     <div>
       <label className="block text-sm font-medium text-text mb-2">
@@ -39,61 +51,92 @@ export default function SizeSelector({ width, height, onChange }: Props) {
       </label>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-        {PRESETS.map((p) => {
-          const active = width === p.w && height === p.h;
+        {sizes.map((p) => {
+          const active = width === p.width && height === p.height;
+          const base = "rounded-lg border px-2 py-2 text-center transition-colors";
+
+          if (!p.enabled) {
+            // Disabled → greyed, not selectable, "Coming soon" tooltip on hover.
+            return (
+              <div key={`${p.width}x${p.height}`} className="group relative">
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className={`${base} w-full cursor-not-allowed border-border-custom opacity-45`}
+                >
+                  <span className="block text-sm font-semibold">
+                    {p.width} × {p.height}
+                  </span>
+                  <span className="block text-xs text-muted">
+                    {sizeCm(p.width, p.height)}
+                  </span>
+                </button>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border-custom bg-surface px-2 py-1 text-xs text-text opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                >
+                  Coming soon
+                </span>
+              </div>
+            );
+          }
+
           return (
             <button
-              key={`${p.w}x${p.h}`}
+              key={`${p.width}x${p.height}`}
               type="button"
-              onClick={() => onChange(p.w, p.h)}
-              className={`rounded-lg border px-2 py-2 text-center transition-colors ${
+              onClick={() => onChange(p.width, p.height)}
+              className={`${base} ${
                 active
                   ? "bg-accent text-white border-accent"
                   : "border-border-custom text-muted hover:border-accent/40 hover:text-text"
               }`}
             >
               <span className="block text-sm font-semibold">
-                {p.w} × {p.h}
+                {p.width} × {p.height}
               </span>
               <span
                 className={`block text-xs ${active ? "text-white/80" : "text-muted"}`}
               >
-                {sizeCm(p.w, p.h)}
+                {sizeCm(p.width, p.height)}
               </span>
             </button>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-3">
-        <div>
-          <label className="text-xs text-muted">Width</label>
-          <input
-            type="number"
-            min={MIN_STUDS}
-            max={MAX_STUDS}
-            value={width}
-            onChange={(e) => onChange(clampStuds(Number(e.target.value)), height)}
-            className="block w-20 mt-0.5 px-2 py-1.5 bg-surface border border-border-custom rounded-lg text-sm text-text"
-          />
+      {customSizeEnabled && (
+        <div className="flex items-center gap-3">
+          <div>
+            <label className="text-xs text-muted">Width</label>
+            <input
+              type="number"
+              min={minStud}
+              max={maxStud}
+              value={width}
+              onChange={(e) => onChange(clampStuds(Number(e.target.value), minStud, maxStud), height)}
+              className="block w-20 mt-0.5 px-2 py-1.5 bg-surface border border-border-custom rounded-lg text-sm text-text"
+            />
+          </div>
+          <span className="mt-4 text-muted">x</span>
+          <div>
+            <label className="text-xs text-muted">Height</label>
+            <input
+              type="number"
+              min={minStud}
+              max={maxStud}
+              value={height}
+              onChange={(e) => onChange(width, clampStuds(Number(e.target.value), minStud, maxStud))}
+              className="block w-20 mt-0.5 px-2 py-1.5 bg-surface border border-border-custom rounded-lg text-sm text-text"
+            />
+          </div>
         </div>
-        <span className="mt-4 text-muted">x</span>
-        <div>
-          <label className="text-xs text-muted">Height</label>
-          <input
-            type="number"
-            min={MIN_STUDS}
-            max={MAX_STUDS}
-            value={height}
-            onChange={(e) => onChange(width, clampStuds(Number(e.target.value)))}
-            className="block w-20 mt-0.5 px-2 py-1.5 bg-surface border border-border-custom rounded-lg text-sm text-text"
-          />
-        </div>
-      </div>
+      )}
 
       <p className="mt-3 text-xs text-muted">
         About {sizeCm(width, height)} of finished bricks — or drag the preview
-        corners to resize.
+        corners to {customSizeEnabled ? "resize" : "snap between sizes"}.
       </p>
     </div>
   );
