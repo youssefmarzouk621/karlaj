@@ -89,31 +89,60 @@ model Setting {
 }
 
 /// A selectable mosaic size (in studs). Disabled sizes show as "coming soon".
+/// `price` is the order price for this size, in millimes (1 TND = 1000
+/// millimes); `displayPrice` is the admin-entered formatted string shown to
+/// customers (e.g. "140TND"). Both are 0/empty until an admin sets them.
 model MosaicSize {
-  id        String   @id @default(uuid())
-  width     Int
-  height    Int
-  label     String?  @db.VarChar(100)
-  enabled   Boolean  @default(true)
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  width        Int
+  height       Int
+  label        String?  @db.VarChar(100)
+  enabled      Boolean  @default(true)
+  price        Int      @default(0)
+  displayPrice String   @default("") @map("display_price") @db.VarChar(50)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  artworks Artwork[]
 
   @@unique([width, height])
   @@map("mosaic_sizes")
 }
 
+/// A configurable extra charge added once per order (shipping, packaging,
+/// services, ...). Admin-managed on the dashboard's Pricing page; admin can
+/// add as many as needed. `price` is in millimes, `displayPrice` is the
+/// admin-entered formatted string shown to customers (e.g. "8TND").
+model ExtraCharge {
+  id           String   @id @default(uuid())
+  name         String   @db.VarChar(100)
+  price        Int      @default(0)
+  displayPrice String   @default("") @map("display_price") @db.VarChar(50)
+  enabled      Boolean  @default(true)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("extra_charges")
+}
+
 /// A named color palette. Exactly one palette is enabled at a time (enforced
 /// app-side in the dashboard). The generator builds artwork from the enabled one.
+/// `priceMultiplier` scales a mosaic size's base price for artworks generated
+/// with this palette (e.g. 1.1 = +10%); admin-configurable on the dashboard's
+/// Pricing page.
 model Palette {
-  id        String   @id @default(uuid())
-  name      String   @unique @db.VarChar(100)
-  enabled   Boolean  @default(false)
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  name            String   @unique @db.VarChar(100)
+  enabled         Boolean  @default(false)
+  priceMultiplier Float    @default(1) @map("price_multiplier")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  colors Color[]
+  colors   Color[]
+  artworks Artwork[]
 
   @@map("palettes")
 }
@@ -181,4 +210,115 @@ model InventoryItem {
   @@unique([partId, colorId])
   @@index([colorId])
   @@map("inventory_items")
+}
+
+// ---------------------------------------------------------------------------
+// Cart (anonymous, cookie-based cart of generated artworks)
+// ---------------------------------------------------------------------------
+
+/// Lifecycle of a generated artwork: INITIAL right after generation, LOCKED
+/// while sitting in a cart, REMOVED once taken back out. A future cron job
+/// deletes INITIAL/REMOVED rows that were never checked out.
+enum ArtworkStatus {
+  INITIAL
+  LOCKED
+  REMOVED
+}
+
+/// A generated mosaic, persisted right after `/process` succeeds so it can be
+/// added to a cart later. Mirrors the mosaic-generator's response shape.
+/// `sizeId` links to the matching catalog MosaicSize (for direct price access
+/// via the relation) when width/height match one; null for custom sizes that
+/// don't match any catalog entry. `width`/`height` stay on the row regardless,
+/// since custom-size artworks have no MosaicSize to fall back on. `paletteId`
+/// is the palette that was enabled when this artwork was generated (the
+/// generator always builds from the single enabled palette) — used together
+/// with the size to price the artwork when it's added to a cart.
+model Artwork {
+  id         String        @id @default(uuid())
+  jobId      String?       @unique @map("job_id") @db.VarChar(100)
+  sizeId     String?       @map("size_id")
+  paletteId  String?       @map("palette_id")
+  width      Int
+  height     Int
+  grid       Json
+  placements Json
+  partsList  Json          @map("parts_list")
+  totalParts Int           @map("total_parts")
+  bags       Json
+  status     ArtworkStatus @default(INITIAL)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  size     MosaicSize?    @relation(fields: [sizeId], references: [id], onDelete: SetNull)
+  palette  Palette?       @relation(fields: [paletteId], references: [id], onDelete: SetNull)
+  cartItem CartItem?
+  images   ArtworkImage[]
+
+  @@index([status])
+  @@index([sizeId])
+  @@index([paletteId])
+  @@map("artworks")
+}
+
+/// Which rendered variant an ArtworkImage row is: MAIN is the high-fidelity
+/// render; PREVIEW_1/PREVIEW_2 are progressively smaller sizes for list/
+/// thumbnail contexts (e.g. the cart).
+enum ArtworkImageKind {
+  MAIN
+  PREVIEW_1
+  PREVIEW_2
+}
+
+/// A PNG rendered from an artwork's placements at creation time and written
+/// to disk (`frontend/public/uploads/<artworkId>/<file>.png`), so it doesn't
+/// need to be recomputed on a `<canvas>` client-side every time it's shown.
+/// `url` is a full HTTP URL (ASSETS_BASE_URL + the served path), stored
+/// ready-to-use rather than assembled at read time.
+model ArtworkImage {
+  id        String           @id @default(uuid())
+  artworkId String           @map("artwork_id")
+  kind      ArtworkImageKind
+  url       String           @db.VarChar(500)
+  width     Int
+  height    Int
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+
+  @@unique([artworkId, kind])
+  @@index([artworkId])
+  @@map("artwork_images")
+}
+
+/// An anonymous cart identified by an opaque token stored in a browser
+/// cookie (no user accounts yet). Created lazily on first "Add to cart".
+model Cart {
+  id        String   @id @default(uuid())
+  token     String   @unique @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+/// One artwork sitting in a cart. `artworkId` is unique — an artwork lives
+/// in at most one cart at a time. `price` (millimes) is computed once, when
+/// the artwork is added to the cart, as the artwork's size price times its
+/// palette's price multiplier — it does not change if the admin edits pricing
+/// afterward.
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String   @map("cart_id")
+  artworkId String   @unique @map("artwork_id")
+  price     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+
+  @@index([cartId])
+  @@map("cart_items")
 }

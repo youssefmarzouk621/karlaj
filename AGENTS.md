@@ -75,3 +75,30 @@ npm run dev                # next dev -p 3002
 Open http://localhost:3002. Auth is via Keycloak (config in `dashboard/.env`); DB connection via Prisma to MySQL.
 
 To stop the infra services: `cd infra && npm run services:down`.
+
+## Validating changes
+
+Both Next.js apps have Playwright installed for agent-driven validation. Once
+you've made a change that touches a page, component, or route, **run it
+through a real browser before calling the work done** — don't rely on `curl`
+or on checking whether the dev server's port is open; neither one tells you
+the page actually rendered or that an interaction actually works.
+
+```bash
+cd frontend && npx playwright test        # http://localhost:3000
+cd dashboard && npx playwright test       # http://localhost:3002
+```
+
+Each app's `playwright.config.ts` reuses whatever dev server is already
+running on its port, so you don't need to start one yourself if it's already
+up. Starter coverage lives in `frontend/e2e/` and `dashboard/e2e/` — when your
+change touches a specific page or flow, add or extend a spec for it (navigate,
+interact, assert on the resulting DOM state) rather than only re-running the
+existing smoke tests. Delete throwaway specs you added purely to eyeball a
+one-off change; keep the ones worth running again.
+
+The dashboard's `/dashboard/*` pages and most `/api/*` routes require a real
+Keycloak session (`dashboard/src/middleware.ts`) that Playwright can't obtain
+without live admin credentials — its coverage there is limited to public
+routes and the login-redirect behavior. For an authenticated dashboard check,
+say so explicitly rather than claiming the page was verified.

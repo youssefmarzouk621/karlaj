@@ -14,6 +14,7 @@ import SizePreview from "@/components/SizePreview";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import RoomMockups from "@/components/RoomMockups";
 import FrameMockups, { hasFrameMockups } from "@/components/FrameMockups";
+import type { Placement, Part } from "@/lib/mosaicTypes";
 
 // WebGL can't render on the server, so load the 3D view client-only.
 const Mosaic3D = dynamic(() => import("@/components/Mosaic3D"), {
@@ -25,27 +26,9 @@ const Mosaic3D = dynamic(() => import("@/components/Mosaic3D"), {
   ),
 });
 
-interface Placement {
-  part_id: string;
-  part_name: string;
-  color_id: number;
-  row: number;
-  col: number;
-  brick_width: number;
-  brick_height: number;
-}
-
-interface Part {
-  part_id: string;
-  part_name: string;
-  color_id: number;
-  color_name: string;
-  rgb: [number, number, number];
-  quantity: number;
-}
-
 interface MosaicResult {
   job_id: string;
+  artworkId: string;
   width: number;
   height: number;
   grid: number[][];
@@ -89,12 +72,16 @@ export default function CreateFlow({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MosaicResult | null>(null);
+  const [cartStatus, setCartStatus] = useState<
+    "idle" | "adding" | "in-cart" | "removing"
+  >("idle");
 
   const handleImageSelected = (f: File, url: string) => {
     setFile(f);
     setPreview(url);
     setResult(null);
     setError(null);
+    setCartStatus("idle");
   };
 
   const handleGenerate = async () => {
@@ -115,6 +102,7 @@ export default function CreateFlow({
       }
       const data: MosaicResult = await res.json();
       setResult(data);
+      setCartStatus("idle");
       setStep(2);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -128,9 +116,43 @@ export default function CreateFlow({
     setPreview(null);
     setResult(null);
     setError(null);
+    setCartStatus("idle");
     setWidth(defaultSize.width);
     setHeight(defaultSize.height);
     setStep(0);
+  };
+
+  const handleCartToggle = async () => {
+    if (!result) return;
+
+    if (cartStatus === "in-cart") {
+      setCartStatus("removing");
+      try {
+        const res = await fetch(`/api/cart/items/${result.artworkId}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Failed to remove from cart");
+        setCartStatus("idle");
+        window.dispatchEvent(new Event("cart:updated"));
+      } catch {
+        setCartStatus("in-cart");
+      }
+      return;
+    }
+
+    setCartStatus("adding");
+    try {
+      const res = await fetch("/api/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artworkId: result.artworkId }),
+      });
+      if (!res.ok) throw new Error("Failed to add to cart");
+      setCartStatus("in-cart");
+      window.dispatchEvent(new Event("cart:updated"));
+    } catch {
+      setCartStatus("idle");
+    }
   };
 
   const colorMap: Record<number, [number, number, number]> = {};
@@ -330,14 +352,38 @@ export default function CreateFlow({
                 </p>
               </div>
             </div>
-            <a
-              href={`/api/pdf/${result.job_id}`}
-              download
-              className="inline-flex shrink-0 items-center gap-2 bg-accent hover:bg-accent-hover text-white font-medium px-5 py-2.5 rounded-lg transition-colors text-sm"
-            >
-              Download Instructions PDF
-              <DownloadIcon />
-            </a>
+            <div className="flex flex-col gap-3 sm:flex-row sm:shrink-0">
+              <button
+                onClick={handleCartToggle}
+                disabled={cartStatus === "adding" || cartStatus === "removing"}
+                className={`inline-flex items-center justify-center gap-2 font-medium px-5 py-2.5 rounded-lg transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-60 ${
+                  cartStatus === "in-cart"
+                    ? "border border-accent text-accent hover:bg-accent/10"
+                    : "border border-border-custom text-text hover:border-text/30"
+                }`}
+              >
+                {(cartStatus === "adding" || cartStatus === "removing") && (
+                  <span className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
+                )}
+                {cartStatus === "adding" && "Adding…"}
+                {cartStatus === "removing" && "Removing…"}
+                {cartStatus === "in-cart" && "Remove from Cart"}
+                {cartStatus === "idle" && (
+                  <>
+                    Add to Cart
+                    <CartIcon />
+                  </>
+                )}
+              </button>
+              <a
+                href={`/api/pdf/${result.job_id}`}
+                download
+                className="inline-flex shrink-0 items-center gap-2 bg-accent hover:bg-accent-hover text-white font-medium px-5 py-2.5 rounded-lg transition-colors text-sm"
+              >
+                Download Instructions PDF
+                <DownloadIcon />
+              </a>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -385,6 +431,16 @@ function ResultBadge({
       <h3 className="text-xl font-bold text-text">{title}</h3>
       <p className="mt-2 text-sm text-muted">{description}</p>
     </div>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <circle cx={9} cy={20} r={1} />
+      <circle cx={18} cy={20} r={1} />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h2l2.4 12.2a1 1 0 0 0 1 .8h8.6a1 1 0 0 0 1-.8L20 8H6" />
+    </svg>
   );
 }
 

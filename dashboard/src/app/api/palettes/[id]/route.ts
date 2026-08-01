@@ -22,6 +22,13 @@ export async function PATCH(
     await prisma.palette.update({ where: { id }, data: { name: body.name.trim() } });
   }
 
+  if (typeof body.priceMultiplier === "number" && Number.isFinite(body.priceMultiplier)) {
+    await prisma.palette.update({
+      where: { id },
+      data: { priceMultiplier: body.priceMultiplier },
+    });
+  }
+
   const palette = await prisma.palette.findUnique({
     where: { id },
     include: { colors: { orderBy: { sortOrder: "asc" } } },

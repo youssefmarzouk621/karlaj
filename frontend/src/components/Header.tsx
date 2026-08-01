@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const NAV = [
   { label: "Home", href: "/" },
@@ -13,6 +13,27 @@ const NAV = [
 export default function Header() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCount = () => {
+      fetch("/api/cart/count")
+        .then((res) => (res.ok ? res.json() : { count: 0 }))
+        .then((data) => {
+          if (!cancelled) setCartCount(data.count ?? 0);
+        })
+        .catch(() => {});
+    };
+
+    loadCount();
+    window.addEventListener("cart:updated", loadCount);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("cart:updated", loadCount);
+    };
+  }, [pathname]);
 
   const handleNav = (href: string) => {
     setOpen(false);
@@ -76,37 +97,52 @@ export default function Header() {
           })}
         </nav>
 
-        <div className="hidden md:flex items-center gap-3">
+        <div className="flex items-center gap-1 md:gap-3">
           <Link
-            href="/login"
-            className="text-sm font-medium text-muted hover:text-text transition-colors px-4 py-2"
+            href="/cart"
+            aria-label="View cart"
+            className="relative w-10 h-10 flex items-center justify-center rounded-lg text-muted hover:text-text transition-colors"
           >
-            Log in
+            <CartIcon />
+            {cartCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-accent text-white text-[10px] font-semibold flex items-center justify-center leading-none">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
           </Link>
-          <Link
-            href="/create"
-            className="text-sm font-medium bg-accent hover:bg-accent-hover text-white px-5 py-2 rounded-lg transition-colors"
-          >
-            Get started
-          </Link>
-        </div>
 
-        {/* Mobile menu button */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="md:hidden w-10 h-10 flex items-center justify-center text-muted hover:text-text transition-colors"
-          aria-label="Menu"
-        >
-          {open ? (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          )}
-        </button>
+          <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/login"
+              className="text-sm font-medium text-muted hover:text-text transition-colors px-4 py-2"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/create"
+              className="text-sm font-medium bg-accent hover:bg-accent-hover text-white px-5 py-2 rounded-lg transition-colors"
+            >
+              Get started
+            </Link>
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setOpen(!open)}
+            className="md:hidden w-10 h-10 flex items-center justify-center text-muted hover:text-text transition-colors"
+            aria-label="Menu"
+          >
+            {open ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile menu */}
@@ -152,5 +188,15 @@ export default function Header() {
         </div>
       )}
     </header>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <circle cx={9} cy={20} r={1} />
+      <circle cx={18} cy={20} r={1} />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h2l2.4 12.2a1 1 0 0 0 1 .8h8.6a1 1 0 0 0 1-.8L20 8H6" />
+    </svg>
   );
 }

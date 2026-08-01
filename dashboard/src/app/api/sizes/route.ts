@@ -6,23 +6,38 @@ export async function GET() {
   return NextResponse.json({ sizes });
 }
 
-// PUT /api/sizes { updates: [{ id, enabled?, label? }] }
-// Batched save of the enabled/label edits made on the dashboard, so toggling a
-// checkbox no longer fires one request per change. Runs in a single transaction.
+// PUT /api/sizes { updates: [{ id, enabled?, label?, price?, displayPrice? }] }
+// Batched save of the edits made on the dashboard (sizes page: enabled/label;
+// pricing page: price/displayPrice), so toggling a checkbox no longer fires
+// one request per change. Runs in a single transaction.
 export async function PUT(request: NextRequest) {
   const { updates } = await request.json();
   if (!Array.isArray(updates)) {
     return NextResponse.json({ error: "updates must be an array" }, { status: 400 });
   }
+  for (const u of updates) {
+    if ("price" in u && (typeof u.price !== "number" || u.price <= 0)) {
+      return NextResponse.json({ error: "price must be greater than 0" }, { status: 400 });
+    }
+  }
   await prisma.$transaction(
-    updates.map((u: { id: string; enabled?: boolean; label?: string | null }) =>
-      prisma.mosaicSize.update({
-        where: { id: u.id },
-        data: {
-          ...(typeof u.enabled === "boolean" ? { enabled: u.enabled } : {}),
-          ...("label" in u ? { label: u.label || null } : {}),
-        },
-      })
+    updates.map(
+      (u: {
+        id: string;
+        enabled?: boolean;
+        label?: string | null;
+        price?: number;
+        displayPrice?: string;
+      }) =>
+        prisma.mosaicSize.update({
+          where: { id: u.id },
+          data: {
+            ...(typeof u.enabled === "boolean" ? { enabled: u.enabled } : {}),
+            ...("label" in u ? { label: u.label || null } : {}),
+            ...(typeof u.price === "number" ? { price: u.price } : {}),
+            ...(typeof u.displayPrice === "string" ? { displayPrice: u.displayPrice } : {}),
+          },
+        })
     )
   );
   const sizes = await prisma.mosaicSize.findMany({ orderBy: { sortOrder: "asc" } });

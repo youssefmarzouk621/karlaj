@@ -12,6 +12,7 @@ interface Palette {
   id: string;
   name: string;
   enabled: boolean;
+  priceMultiplier: number;
   colors: Color[];
 }
 
@@ -42,6 +43,16 @@ export default function PalettesPage() {
       body: JSON.stringify({ enabled: true }),
     });
     flash("Enabled palette");
+  };
+
+  const updateMultiplier = async (id: string, priceMultiplier: number) => {
+    setPalettes((prev) => prev.map((p) => (p.id === id ? { ...p, priceMultiplier } : p)));
+    await fetch(`/api/palettes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priceMultiplier }),
+    });
+    flash("Saved multiplier");
   };
 
   const addPalette = async () => {
@@ -92,7 +103,9 @@ export default function PalettesPage() {
         <div>
           <h1 className="text-2xl font-black tracking-tight">Color Palettes</h1>
           <p className="text-muted text-sm mt-1">
-            Exactly one palette is active — the generator builds artwork from it.
+            Exactly one palette is active — the generator builds artwork from it. The
+            price multiplier scales a mosaic&apos;s size price for artworks generated
+            with that palette.
           </p>
         </div>
         {message && <span className="text-sm text-accent">{message}</span>}
@@ -108,6 +121,17 @@ export default function PalettesPage() {
                   ({p.colors.length} colors)
                 </span>
               </span>
+              <label className="flex items-center gap-2 text-sm text-muted shrink-0">
+                Price ×
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={p.priceMultiplier}
+                  onBlur={(e) => updateMultiplier(p.id, Number(e.target.value) || 0)}
+                  className="w-20 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
               {p.enabled ? (
                 <span className="text-xs font-medium text-accent bg-accent/10 px-2 py-1 rounded">
                   Active

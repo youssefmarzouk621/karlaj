@@ -8,6 +8,7 @@ interface Size {
   height: number;
   label: string | null;
   enabled: boolean;
+  price: number;
   sortOrder: number;
 }
 
@@ -44,6 +45,20 @@ export default function SizesPage() {
   const editSize = (id: string, data: Partial<Size>) => {
     setSizes((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
     setDirty(true);
+  };
+
+  // Price saves immediately on blur (like the Pricing page) rather than
+  // going through "Save changes" — so it can be validated and persisted on
+  // its own without being tangled up with unrelated label/enabled edits.
+  // Zero (or anything non-numeric) is rejected; the input reverts.
+  const patchPrice = async (id: string, price: number) => {
+    setSizes((prev) => prev.map((s) => (s.id === id ? { ...s, price } : s)));
+    const res = await fetch(`/api/sizes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ price }),
+    });
+    flash(res.ok ? "Saved price" : "Error saving price");
   };
 
   const save = async () => {
@@ -144,6 +159,25 @@ export default function SizesPage() {
                 onChange={(e) => editSize(s.id, { label: e.target.value })}
                 className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
               />
+              <label className="flex items-center gap-2 text-sm text-muted shrink-0">
+                Price (millimes)
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  defaultValue={s.price}
+                  onBlur={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isFinite(value) || value <= 0) {
+                      e.target.value = String(s.price);
+                      flash("Price must be greater than 0");
+                      return;
+                    }
+                    if (value !== s.price) patchPrice(s.id, value);
+                  }}
+                  className="w-24 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
               <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
                 <input
                   type="checkbox"

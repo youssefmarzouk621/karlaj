@@ -27,7 +27,139 @@ const EMPTY_PLAN: Plan = {
   features: [],
 };
 
+interface SizePrice {
+  id: string;
+  width: number;
+  height: number;
+  label: string | null;
+  price: number;
+  displayPrice: string;
+}
+
+interface Charge {
+  id: string;
+  name: string;
+  price: number;
+  displayPrice: string;
+  enabled: boolean;
+}
+
+const EMPTY_CHARGE = { name: "", price: 0, displayPrice: "" };
+
+interface PaletteMultiplier {
+  id: string;
+  name: string;
+  enabled: boolean;
+  priceMultiplier: number;
+}
+
 export default function PricingPage() {
+  // --- Order pricing: price per mosaic size -------------------------------
+  const [sizes, setSizes] = useState<SizePrice[]>([]);
+  const [sizesMessage, setSizesMessage] = useState("");
+
+  const loadSizes = () =>
+    fetch("/api/sizes")
+      .then((r) => r.json())
+      .then((d) => setSizes(d.sizes ?? []));
+
+  useEffect(() => {
+    loadSizes();
+  }, []);
+
+  const flashSizes = (msg: string) => {
+    setSizesMessage(msg);
+    setTimeout(() => setSizesMessage(""), 2500);
+  };
+
+  const patchSize = async (id: string, data: Partial<SizePrice>) => {
+    setSizes((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+    await fetch(`/api/sizes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    flashSizes("Saved");
+  };
+
+  // --- Order pricing: multiplier per color palette -------------------------
+  const [palettes, setPalettes] = useState<PaletteMultiplier[]>([]);
+  const [palettesMessage, setPalettesMessage] = useState("");
+
+  const loadPalettes = () =>
+    fetch("/api/palettes")
+      .then((r) => r.json())
+      .then((d) => setPalettes(d.palettes ?? []));
+
+  useEffect(() => {
+    loadPalettes();
+  }, []);
+
+  const flashPalettes = (msg: string) => {
+    setPalettesMessage(msg);
+    setTimeout(() => setPalettesMessage(""), 2500);
+  };
+
+  const patchPalette = async (id: string, priceMultiplier: number) => {
+    setPalettes((prev) => prev.map((p) => (p.id === id ? { ...p, priceMultiplier } : p)));
+    await fetch(`/api/palettes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priceMultiplier }),
+    });
+    flashPalettes("Saved");
+  };
+
+  // --- Order pricing: extra charges (shipping, packaging, services, ...) --
+  const [charges, setCharges] = useState<Charge[]>([]);
+  const [chargesMessage, setChargesMessage] = useState("");
+  const [newCharge, setNewCharge] = useState(EMPTY_CHARGE);
+
+  const loadCharges = () =>
+    fetch("/api/charges")
+      .then((r) => r.json())
+      .then((d) => setCharges(d.charges ?? []));
+
+  useEffect(() => {
+    loadCharges();
+  }, []);
+
+  const flashCharges = (msg: string) => {
+    setChargesMessage(msg);
+    setTimeout(() => setChargesMessage(""), 2500);
+  };
+
+  const patchCharge = async (id: string, data: Partial<Charge>) => {
+    setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, ...data } : c)));
+    await fetch(`/api/charges/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    flashCharges("Saved");
+  };
+
+  const addCharge = async () => {
+    if (!newCharge.name.trim()) return;
+    const res = await fetch("/api/charges", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newCharge),
+    });
+    if (res.ok) {
+      setNewCharge(EMPTY_CHARGE);
+      await loadCharges();
+      flashCharges("Added");
+    }
+  };
+
+  const removeCharge = async (id: string) => {
+    await fetch(`/api/charges/${id}`, { method: "DELETE" });
+    await loadCharges();
+    flashCharges("Deleted");
+  };
+
+  // --- Marketing pricing plans (landing page cards) -----------------------
   const [plans, setPlans] = useState<Plan[]>([]);
   const [editing, setEditing] = useState<Plan | null>(null);
   const [featureInput, setFeatureInput] = useState("");
@@ -87,10 +219,234 @@ export default function PricingPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-8">
+        <h1 className="text-2xl font-black tracking-tight">Pricing</h1>
+        <p className="text-muted text-sm mt-1">
+          Configure what customers are charged, and the marketing pricing plans shown on
+          the landing page.
+        </p>
+      </div>
+
+      {/* Size pricing */}
+      <section className="bg-surface border border-border-custom rounded-xl p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-bold">Size pricing</h2>
+            <p className="text-muted text-xs mt-1">
+              What a customer pays for each mosaic size. Price is in millimes (1 TND =
+              1000 millimes); display price is what customers see (e.g. &quot;140TND&quot;).
+            </p>
+          </div>
+          {sizesMessage && <span className="text-sm text-accent shrink-0">{sizesMessage}</span>}
+        </div>
+        <div className="space-y-2">
+          {sizes.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-4 bg-bg border border-border-custom rounded-lg px-4 py-3"
+            >
+              <span className="font-semibold w-24 shrink-0">
+                {s.width} × {s.height}
+              </span>
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Price (millimes)
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  defaultValue={s.price}
+                  onBlur={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isFinite(value) || value <= 0) {
+                      e.target.value = String(s.price);
+                      flashSizes("Price must be greater than 0");
+                      return;
+                    }
+                    if (value !== s.price) patchSize(s.id, { price: value });
+                  }}
+                  className="w-28 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted flex-1">
+                Display price
+                <input
+                  defaultValue={s.displayPrice}
+                  placeholder="140TND"
+                  onBlur={(e) => patchSize(s.id, { displayPrice: e.target.value })}
+                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+            </div>
+          ))}
+          {sizes.length === 0 && (
+            <p className="text-muted text-sm text-center py-4">
+              No sizes yet — add one on the Sizes page first.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Palette pricing */}
+      <section className="bg-surface border border-border-custom rounded-xl p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-bold">Palette pricing</h2>
+            <p className="text-muted text-xs mt-1">
+              Multiplier applied to a mosaic&apos;s size price, based on the color
+              palette it was generated with (e.g. 1.1 = +10%).
+            </p>
+          </div>
+          {palettesMessage && (
+            <span className="text-sm text-accent shrink-0">{palettesMessage}</span>
+          )}
+        </div>
+        <div className="space-y-2">
+          {palettes.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center gap-4 bg-bg border border-border-custom rounded-lg px-4 py-3"
+            >
+              <span className="font-semibold flex-1">
+                {p.name}
+                {p.enabled && (
+                  <span className="ml-2 text-xs font-medium text-accent bg-accent/10 px-2 py-1 rounded">
+                    Active
+                  </span>
+                )}
+              </span>
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Multiplier
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={p.priceMultiplier}
+                  onBlur={(e) => patchPalette(p.id, Number(e.target.value) || 0)}
+                  className="w-24 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+            </div>
+          ))}
+          {palettes.length === 0 && (
+            <p className="text-muted text-sm text-center py-4">
+              No palettes yet — add one on the Palettes page first.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Extra charges */}
+      <section className="bg-surface border border-border-custom rounded-xl p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-bold">Extra charges</h2>
+            <p className="text-muted text-xs mt-1">
+              Added once per order, on top of the size price (shipping, packaging,
+              services, ...). Add as many as you need.
+            </p>
+          </div>
+          {chargesMessage && <span className="text-sm text-accent shrink-0">{chargesMessage}</span>}
+        </div>
+
+        <div className="space-y-2 mb-4">
+          {charges.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center gap-3 bg-bg border border-border-custom rounded-lg px-4 py-3"
+            >
+              <input
+                defaultValue={c.name}
+                onBlur={(e) => patchCharge(c.id, { name: e.target.value })}
+                className="w-32 shrink-0 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm font-medium focus:outline-none focus:border-accent"
+              />
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Price (millimes)
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  defaultValue={c.price}
+                  onBlur={(e) => patchCharge(c.id, { price: Number(e.target.value) || 0 })}
+                  className="w-28 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted flex-1">
+                Display price
+                <input
+                  defaultValue={c.displayPrice}
+                  placeholder="8TND"
+                  onBlur={(e) => patchCharge(c.id, { displayPrice: e.target.value })}
+                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-surface border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={c.enabled}
+                  onChange={(e) => patchCharge(c.id, { enabled: e.target.checked })}
+                />
+                Enabled
+              </label>
+              <button
+                onClick={() => removeCharge(c.id)}
+                className="text-xs text-muted hover:text-accent shrink-0"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+          {charges.length === 0 && (
+            <p className="text-muted text-sm text-center py-4">
+              No extra charges yet — add shipping, packaging, or anything else below.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-end gap-3 pt-4 border-t border-border-custom">
+          <div className="w-32">
+            <label className="block text-xs text-muted mb-1">Name</label>
+            <input
+              value={newCharge.name}
+              onChange={(e) => setNewCharge({ ...newCharge, name: e.target.value })}
+              placeholder="Shipping"
+              className="w-full px-3 py-2 rounded-lg bg-bg border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="w-32">
+            <label className="block text-xs text-muted mb-1">Price (millimes)</label>
+            <input
+              type="number"
+              min="0"
+              value={newCharge.price}
+              onChange={(e) => setNewCharge({ ...newCharge, price: Number(e.target.value) || 0 })}
+              className="w-full px-3 py-2 rounded-lg bg-bg border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs text-muted mb-1">Display price</label>
+            <input
+              value={newCharge.displayPrice}
+              onChange={(e) => setNewCharge({ ...newCharge, displayPrice: e.target.value })}
+              placeholder="8TND"
+              className="w-full px-3 py-2 rounded-lg bg-bg border border-border-custom text-text text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <button
+            onClick={addCharge}
+            className="bg-accent hover:bg-accent-hover text-white font-medium px-5 py-2 rounded-lg transition-colors text-sm"
+          >
+            + Add charge
+          </button>
+        </div>
+      </section>
+
+      {/* Marketing pricing plans */}
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight">Pricing Plans</h1>
-          <p className="text-muted text-sm mt-1">Manage pricing tiers and features</p>
+          <h2 className="text-lg font-bold tracking-tight">Pricing plans</h2>
+          <p className="text-muted text-sm mt-1">
+            Marketing tiers and features shown on the landing page.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {message && <span className="text-sm text-accent">{message}</span>}
