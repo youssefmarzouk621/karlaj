@@ -103,8 +103,12 @@ export default function BeforeAfterSlider({
         style={{ aspectRatio: `${gridCols} / ${gridRows}` }}
       >
         {/* AFTER — the mosaic, base layer */}
+        {/* The test id marks the one canvas that is a plain 2D render of the
+            generated mosaic: the 3D scene is WebGL (unreadable via getImageData)
+            and the mockups composite the mosaic into a photo. */}
         <canvas
           ref={canvasRef}
+          data-testid="mosaic-canvas"
           className="pointer-events-none absolute inset-0 h-full w-full"
         />
 

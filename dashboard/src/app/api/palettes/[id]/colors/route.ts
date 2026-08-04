@@ -5,6 +5,9 @@ interface ColorInput {
   name: string;
   hex: string;
   code?: string | null;
+  // Colors sourced outside the supplier's own range (the neutrals). Carried
+  // through the round-trip so a save from the editor doesn't drop the flag.
+  external?: boolean;
 }
 
 // Parse "#RRGGBB" -> [r,g,b]; returns null if malformed.
@@ -41,6 +44,7 @@ export async function PUT(
       g: rgb[1],
       b: rgb[2],
       code: c.code?.trim() || null,
+      external: c.external === true,
       sortOrder: i,
     });
   }

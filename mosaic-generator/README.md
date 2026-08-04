@@ -18,10 +18,16 @@ so a mosaic generates in a few milliseconds (pixel-identical output).
 ## Pipeline
 
 ```
-decode -> center-crop to aspect ratio -> resize (INTER_LINEAR) -> nearest palette color
+decode -> crop -> cap resolution -> detect silhouette/text
+       -> downsample by region -> nearest CIELAB color -> fit plates
 ```
 
-No mean-shift, tone, chroma-bias, or despeckle. That is intentional.
+Full write-up, including why the original "no preprocessing" rule was right but
+conditional, and the palette requirement that matters more than any of the code:
+**[docs/pipeline.md](../docs/pipeline.md)**.
+
+The original brickmos conversion (`INTER_LINEAR` + Euclidean RGB, no
+conditioning) is still reachable as the `legacy` profile in `preprocess.py`.
 
 ## Run
 
@@ -45,12 +51,16 @@ Docs: http://localhost:8002/docs
 
 | File | Role |
 |------|------|
-| `palette.py` | 33 BrickLink colors + vectorized nearest-color matcher |
-| `mosaic.py` | decode / center-crop / resize / quantize → index grid |
+| `palette.py` | palette colors + RGB and CIELAB nearest-color matchers |
+| `preprocess.py` | region-aware downsampling, tone compression, profiles |
+| `attention.py` | silhouette (saliency + GrabCut) and text (MSER) → priority map |
+| `mosaic.py` | decode / crop / resolution cap / quantize → index grid |
 | `bricks.py` | grid → placements + parts list, merging same-color runs into plates |
 | `bags.py` | split into build sections |
 | `pdf.py` | preview + BrickLink BOM PDF |
+| `db.py` | reads the enabled palette + parts from MySQL |
 | `main.py` | FastAPI wiring |
+| `tests_result/` | comparison harnesses and kept reference renders |
 
 ## Bricks & the 1×1 cap
 
@@ -66,11 +76,27 @@ keeping **1×1 ≤ 35% of parts**, without changing the colors:
    the 1×1 fraction, so a very busy image falls back to a smaller-plate catalog
    (more parts) that keeps the unavoidable isolated 1×1s under the limit.
 
+3. **Spend the budget where it shows** — the outline of the detected subject and
+   any detected text are built from plates of at most 2 studs, and no plate may
+   straddle that boundary. Without this, 73–77% of 1×1s landed in the
+   background. Capped at `MAX_PART_INFLATION` (+25% parts) because this changes
+   the physical build, not the picture.
+
 Measured on the sample photos: 1×1 lands at **20–34%** with a healthy mix of
 1×2/1×3/1×4/2×2/2×3/2×4, colors identical to the 1×1-only output.
 
+## Palette requirement
+
+A palette needs a white, a black and a light near-neutral. The PX supplier range
+has none, which made white photos render lavender; four neutrals are seeded and
+flagged `external` in the DB. See
+[docs/pipeline.md](../docs/pipeline.md#palette-requirements) — read this before
+swapping palettes.
+
 ## Roadmap
 
-- **Done:** larger bricks with the 1×1 cap (above).
+- **Done:** larger bricks with the 1×1 cap; perceptual matching; silhouette/text
+  attention steering both quantization and tiling.
 - Possible next: bias tiling to favor 2×N over 1×N for sturdier builds; expose the
-  cap / catalog as request parameters; user-constrained palette (colors you own).
+  cap / catalog as request parameters; user-constrained palette (colors you own);
+  a DNN text detector if stylised type turns out to matter.

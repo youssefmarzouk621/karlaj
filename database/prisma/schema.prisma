@@ -148,6 +148,11 @@ model Palette {
 }
 
 /// A single color in a palette. Stores both hex and r/g/b for convenience.
+/// `external` marks a color that is NOT part of the supplier's own range —
+/// currently the neutrals (white/grays/black), which the PX range doesn't
+/// carry but which the generator needs: without a light neutral, every white
+/// in a photo lands on a tinted brick and high-key images render purple or
+/// beige. These have to be sourced separately, so they're flagged for ordering.
 model Color {
   id        String   @id @default(uuid())
   paletteId String   @map("palette_id")
@@ -157,6 +162,7 @@ model Color {
   g         Int
   b         Int
   code      String?  @db.VarChar(50) // optional supplier code, e.g. "B01"
+  external  Boolean  @default(false) // sourced outside the supplier's range
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
 

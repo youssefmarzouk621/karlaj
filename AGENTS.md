@@ -2,6 +2,10 @@
 
 This repo has five runnable pieces: a Python backend, a Python `mosaic-generator` service, a Next.js frontend, a Next.js dashboard, and `brickmos` (a vendored third-party Lego-mosaic generator with an added HTTP service). The dashboard also depends on infra services (MySQL + Keycloak) started via Docker Compose.
 
+For how an uploaded photo actually becomes a mosaic — every stage from decode to
+bags, what's deliberately *not* done, and which knobs change the output — read
+[docs/pipeline.md](docs/pipeline.md) before touching `mosaic-generator/`.
+
 ## Backend (FastAPI, port 8000)
 
 ```bash
@@ -33,6 +37,8 @@ uvicorn main:app --reload --port 8002
 ```
 
 Serves `POST /process` and `GET /pdf/{job_id}` (same shape as the backend, so the frontend can point at it via `PYTHON_API_URL`); docs at http://localhost:8002/docs.
+
+Pipeline internals (stages, the 1×1 cap, palette/parts config, response shape, tuning knobs): [docs/pipeline.md](docs/pipeline.md).
 
 ## brickmos service (FastAPI, port 8001)
 

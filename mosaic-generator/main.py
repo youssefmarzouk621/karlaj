@@ -17,8 +17,9 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from attention import BACKGROUND, priority_map
 from palette import Palette, BRICK_COLORS
-from mosaic import image_to_index_grid
+from mosaic import prepare_source, quantize
 from bricks import index_grid_to_color_grid, fit_bricks, build_parts_list, DEFAULT_PARTS
 from bags import organize_bags
 from pdf import generate_pdf
@@ -62,13 +63,22 @@ async def process(
     parts = load_parts() or DEFAULT_PARTS
 
     try:
-        index_grid = image_to_index_grid(image_bytes, palette, width, height)
+        cropped = prepare_source(image_bytes, width, height)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 
-    # Merge same-color studs into larger plates using only the enabled parts.
-    # Returns the (lightly cleaned) grid so `grid` and `placements` agree.
-    placements, index_grid = fit_bricks(index_grid, palette, parts)
+    # Where detail is worth paying for: the salient subject and any lettering.
+    # Detection runs on the cropped source, where strokes and edges still
+    # exist — the stud grid is far too coarse to find anything in.
+    priority = priority_map(cropped, width, height)
+
+    # The priority map steers both halves of the pipeline: quantization samples
+    # those studs crisply instead of smoothing them (this is what makes the
+    # subject read), and the tiler builds them from small plates whose edges
+    # follow the shape (this is what makes the physical build follow it).
+    index_grid, rgb_small = quantize(cropped, palette, width, height,
+                                     priority=priority)
+    placements, index_grid = fit_bricks(index_grid, palette, parts, priority=priority)
     grid = index_grid_to_color_grid(index_grid, palette)
     parts_list = build_parts_list(placements)
     bags = organize_bags(placements, width, height)

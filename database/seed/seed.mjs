@@ -56,10 +56,56 @@ const BRICKLINK = [
   ["Dark Pink", 200, 112, 128], ["Bright Pink", 255, 187, 255],
 ];
 
+// --- external neutrals ----------------------------------------------------
+// The PX supplier range carries no white, no black and no light neutral: its
+// L* runs 16–84 (photos run 0–100) and every light color is saturated. Without
+// these, nearest-color matching sends every white in a photo to a tinted brick
+// — a white studio shot renders lavender, white poster text vanishes into a
+// beige background. They are NOT supplier stock, so they're flagged
+// `external: true` and must be sourced separately.
+const NEUTRALS = [
+  { name: "White", code: "NEU-W", r: 245, g: 245, b: 243 },
+  { name: "Light Gray", code: "NEU-LG", r: 200, g: 200, b: 198 },
+  { name: "Mid Gray", code: "NEU-MG", r: 128, g: 128, b: 127 },
+  { name: "Black", code: "NEU-BK", r: 26, g: 26, b: 26 },
+];
+
+/// Add any missing external neutrals to a palette. Idempotent and additive —
+/// it never deletes or rewrites a Color, because that would cascade-delete the
+/// inventory rows attached to it.
+async function ensureExternalNeutrals(paletteId) {
+  const existing = await prisma.color.findMany({
+    where: { paletteId },
+    select: { code: true, sortOrder: true },
+  });
+  const have = new Set(existing.map((c) => c.code));
+  const missing = NEUTRALS.filter((n) => !have.has(n.code));
+  if (missing.length === 0) return 0;
+
+  let sortOrder = Math.max(0, ...existing.map((c) => c.sortOrder)) + 1;
+  await prisma.color.createMany({
+    data: missing.map((n) => ({
+      paletteId,
+      name: n.name,
+      code: n.code,
+      hex: hex(n.r, n.g, n.b),
+      r: n.r,
+      g: n.g,
+      b: n.b,
+      external: true,
+      sortOrder: sortOrder++,
+    })),
+  });
+  return missing.length;
+}
+
 async function seedPalette(name, enabled, sortOrder, colors) {
   const palette = await prisma.palette.upsert({
     where: { name },
-    update: { enabled, sortOrder },
+    // `enabled` is deliberately not in `update`: which palette is live is an
+    // operational choice made in the dashboard, and re-seeding must not switch
+    // it back (that silently changes the colors of every mosaic generated next).
+    update: { sortOrder },
     create: { name, enabled, sortOrder },
   });
   // Only seed colors for a brand-new palette. Re-seeding must NOT rewrite colors,
@@ -131,8 +177,12 @@ async function main() {
 
   const seller = loadSellerColors();
   if (seller && seller.length) {
-    await seedPalette("Alibaba Supplier (PX)", false, 1, seller);
-    console.log(`Seeded supplier palette with ${seller.length} colors (disabled).`);
+    const px = await seedPalette("Alibaba Supplier (PX)", false, 1, seller);
+    const added = await ensureExternalNeutrals(px.id);
+    console.log(
+      `Seeded supplier palette with ${seller.length} colors` +
+        (added ? `, plus ${added} external neutrals.` : " (neutrals already present).")
+    );
   }
 
   console.log(

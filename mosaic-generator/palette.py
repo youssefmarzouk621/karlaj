@@ -52,18 +52,43 @@ BRICK_COLORS: list[dict] = [
 ]
 
 
+# A source pixel this close to the neutral axis is treated as "meant to be
+# grey/white/black", and chromatic bricks get penalised for it. Roughly the
+# chroma of a faint color cast.
+NEUTRAL_CHROMA = 12.0
+# Strength of that penalty, in dE units per unit of candidate chroma.
+NEUTRAL_PENALTY = 0.6
+
+
 class Palette:
-    """A brick-color palette with a vectorized nearest-color matcher."""
+    """A brick-color palette with vectorized nearest-color matchers.
+
+    Two rules are available:
+
+    - `match` — plain Euclidean RGB, the original brickmos behavior.
+    - `match_perceptual` — CIELAB dE76 plus a neutrality term. Use this when
+      the palette may not cover the image's colors.
+    """
 
     def __init__(self, colors: list[dict] = BRICK_COLORS):
         self.colors = colors
         self._rgb = np.array([c["rgb"] for c in colors], dtype=np.int32)  # (N, 3)
+        self._lab_cache: np.ndarray | None = None
 
     def __len__(self) -> int:
         return len(self.colors)
 
     def color(self, index: int) -> dict:
         return self.colors[index]
+
+    @property
+    def lab(self) -> np.ndarray:
+        """Palette colors as CIELAB (N, 3), computed once."""
+        if self._lab_cache is None:
+            from preprocess import to_lab
+
+            self._lab_cache = to_lab(self._rgb.astype(np.uint8))
+        return self._lab_cache
 
     def match(self, rgb_image: np.ndarray) -> np.ndarray:
         """Map an (H, W, 3) RGB image to palette indices via nearest Euclidean RGB.
@@ -79,3 +104,43 @@ class Palette:
         diff = flat[:, None, :] - self._rgb[None, :, :]
         dist_sq = np.einsum("pnc,pnc->pn", diff, diff)
         return np.argmin(dist_sq, axis=1).reshape(h, w)           # (H, W) indices
+
+    def match_perceptual(self, rgb_image: np.ndarray, compress: bool = True) -> np.ndarray:
+        """Map an (H, W, 3) RGB image to palette indices in CIELAB.
+
+        Euclidean RGB has no notion that a neutral should stay neutral: with a
+        palette whose light colors are all saturated, pure white is ~117 RGB
+        units from everything, and a lavender can beat a beige by a hair, then
+        flip back a pixel later. That is what turned a white studio photo
+        purple and blotchy.
+
+        Two changes fix it:
+
+        - Distance is dE76 in CIELAB, which is far closer to what a viewer
+          reads as "wrong color" than RGB distance is.
+        - Near-neutral source pixels penalise chromatic candidates, so a grey
+          lands on the least saturated brick available rather than whichever
+          tinted one happens to be marginally nearer.
+
+        Lightness is deliberately *not* up-weighted. Doing so looked appealing
+        (it protects whites) but it sends a flat pink field to tan, preserving
+        tone at the cost of hue — and over a large flat area a hue error is
+        the more objectionable of the two.
+        """
+        from preprocess import compress_into_palette_range, to_lab
+
+        h, w = rgb_image.shape[:2]
+        lab = to_lab(rgb_image)                                   # (P, 3)
+        if compress:
+            lab = compress_into_palette_range(lab, self.lab)
+
+        diff = lab[:, None, :] - self.lab[None, :, :]             # (P, N, 3)
+        dist = np.sqrt(np.einsum("pnc,pnc->pn", diff, diff))      # dE76
+
+        src_chroma = np.hypot(lab[:, 1], lab[:, 2])               # (P,)
+        cand_chroma = np.hypot(self.lab[:, 1], self.lab[:, 2])    # (N,)
+        # 1.0 for a perfectly neutral source, fading to 0 by NEUTRAL_CHROMA.
+        neutrality = np.clip(1.0 - src_chroma / NEUTRAL_CHROMA, 0.0, 1.0)
+        dist += NEUTRAL_PENALTY * neutrality[:, None] * cand_chroma[None, :]
+
+        return np.argmin(dist, axis=1).reshape(h, w)

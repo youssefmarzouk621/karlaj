@@ -7,6 +7,8 @@ interface Color {
   name: string;
   hex: string;
   code: string | null;
+  /** Not part of the supplier's range — sourced separately (the neutrals). */
+  external?: boolean;
 }
 interface Palette {
   id: string;
@@ -79,7 +81,14 @@ export default function PalettesPage() {
 
   const openEditor = (p: Palette) => {
     setOpenId(p.id);
-    setDraft(p.colors.map((c) => ({ name: c.name, hex: c.hex, code: c.code })));
+    setDraft(
+      p.colors.map((c) => ({
+        name: c.name,
+        hex: c.hex,
+        code: c.code,
+        external: c.external ?? false,
+      }))
+    );
   };
 
   const saveColors = async (id: string) => {
@@ -119,7 +128,15 @@ export default function PalettesPage() {
                 {p.name}{" "}
                 <span className="text-xs text-muted font-normal">
                   ({p.colors.length} colors)
-                </span>
+                </span>{" "}
+                {p.colors.some((c) => c.external) && (
+                  <span
+                    className="text-xs font-normal text-muted border border-border-custom rounded px-1.5 py-0.5"
+                    title="Colors not stocked by this supplier — sourced separately"
+                  >
+                    {p.colors.filter((c) => c.external).length} external
+                  </span>
+                )}
               </span>
               <label className="flex items-center gap-2 text-sm text-muted shrink-0">
                 Price ×
@@ -164,7 +181,16 @@ export default function PalettesPage() {
                   {draft.map((c, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-1.5 bg-surface border border-border-custom rounded-lg px-2 py-1.5"
+                      title={
+                        c.external
+                          ? "External — not stocked by this supplier, ordered separately"
+                          : undefined
+                      }
+                      className={`flex items-center gap-1.5 bg-surface border rounded-lg px-2 py-1.5 ${
+                        c.external
+                          ? "border-accent border-dashed"
+                          : "border-border-custom"
+                      }`}
                     >
                       <input
                         type="color"
