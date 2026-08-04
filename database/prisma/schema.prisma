@@ -124,6 +124,8 @@ model ExtraCharge {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  cartCharges CartExtraCharge[]
+
   @@map("extra_charges")
 }
 
@@ -299,15 +301,47 @@ model ArtworkImage {
 
 /// An anonymous cart identified by an opaque token stored in a browser
 /// cookie (no user accounts yet). Created lazily on first "Add to cart".
+/// `subtotal` (sum of the items' frozen prices) and `total` (subtotal plus the
+/// applied extra charges) are stored in millimes rather than recomputed at read
+/// time: they're written by `repriceCart` inside the same transaction as every
+/// cart mutation, so the row always holds the amount the customer was shown.
+/// The charges making up `total - subtotal` are itemized in `charges`.
 model Cart {
   id        String   @id @default(uuid())
   token     String   @unique @db.VarChar(64)
+  subtotal  Int      @default(0)
+  total     Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  items CartItem[]
+  items   CartItem[]
+  charges CartExtraCharge[]
 
   @@map("carts")
+}
+
+/// One extra charge (shipping, packaging, ...) as applied to a cart, snapshotted
+/// on every reprice. `name`/`price`/`displayPrice` are copied from the
+/// ExtraCharge row so the line keeps reading the way the customer saw it even
+/// after an admin renames, reprices, disables or deletes the source charge,
+/// while `extraChargeId` keeps the link back to that row for auditing (null
+/// once it's deleted).
+model CartExtraCharge {
+  id            String   @id @default(uuid())
+  cartId        String   @map("cart_id")
+  extraChargeId String?  @map("extra_charge_id")
+  name          String   @db.VarChar(100)
+  price         Int      @default(0)
+  displayPrice  String   @default("") @map("display_price") @db.VarChar(50)
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  cart        Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  extraCharge ExtraCharge? @relation(fields: [extraChargeId], references: [id], onDelete: SetNull)
+
+  @@index([cartId])
+  @@index([extraChargeId])
+  @@map("cart_extra_charges")
 }
 
 /// One artwork sitting in a cart. `artworkId` is unique — an artwork lives

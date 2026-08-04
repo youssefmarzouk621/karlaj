@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/db";
+import { prisma, repriceCart } from "@/lib/db";
 import { CART_COOKIE } from "@/lib/cart";
 
 export async function DELETE(
@@ -21,13 +21,16 @@ export async function DELETE(
     return NextResponse.json({ error: "Item not in cart" }, { status: 404 });
   }
 
-  await prisma.$transaction([
-    prisma.cartItem.delete({ where: { artworkId } }),
-    prisma.artwork.update({
+  const totals = await prisma.$transaction(async (tx) => {
+    await tx.cartItem.delete({ where: { artworkId } });
+    await tx.artwork.update({
       where: { id: artworkId },
       data: { status: "REMOVED" },
-    }),
-  ]);
+    });
+    // Repriced in the same transaction as the removal; returned so the client
+    // can update the order summary without re-fetching the page.
+    return repriceCart(tx, cart.id);
+  });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...totals });
 }

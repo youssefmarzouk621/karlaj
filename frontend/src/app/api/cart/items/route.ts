@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
-import { prisma } from "@/lib/db";
+import { prisma, repriceCart } from "@/lib/db";
 import { CART_COOKIE, CART_COOKIE_MAX_AGE } from "@/lib/cart";
 
 export async function POST(request: NextRequest) {
@@ -39,17 +39,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  await prisma.$transaction([
-    prisma.cartItem.upsert({
+  const cartId = cart.id;
+  const totals = await prisma.$transaction(async (tx) => {
+    await tx.cartItem.upsert({
       where: { artworkId },
-      create: { cartId: cart.id, artworkId, price },
-      update: { cartId: cart.id, price },
-    }),
-    prisma.artwork.update({
+      create: { cartId, artworkId, price },
+      update: { cartId, price },
+    });
+    await tx.artwork.update({
       where: { id: artworkId },
       data: { status: "LOCKED" },
-    }),
-  ]);
+    });
+    // Same transaction as the mutation, so the cart's stored total is never
+    // out of step with its items.
+    return repriceCart(tx, cartId);
+  });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...totals });
 }

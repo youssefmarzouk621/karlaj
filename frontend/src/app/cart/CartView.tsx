@@ -54,11 +54,19 @@ function formatPrice(n: number): string {
 export default function CartView({
   items: initialItems,
   charges,
+  subtotal: initialSubtotal,
+  total: initialTotal,
 }: {
   items: CartArtwork[];
   charges: CartCharge[];
+  subtotal: number;
+  total: number;
 }) {
   const [items, setItems] = useState(initialItems);
+  // Totals are the server's — never summed here — so the figure on screen is
+  // the one stored on the cart row. Removing an item reprices server-side and
+  // hands the new totals back, which is what this state holds.
+  const [totals, setTotals] = useState({ subtotal: initialSubtotal, total: initialTotal });
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -72,7 +80,9 @@ export default function CartView({
     try {
       const res = await fetch(`/api/cart/items/${artworkId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to remove item");
+      const { subtotal, total } = await res.json();
       setItems((prev) => prev.filter((item) => item.artworkId !== artworkId));
+      setTotals({ subtotal, total });
       window.dispatchEvent(new Event("cart:updated"));
     } catch {
       setError("Couldn't remove that item. Try again.");
@@ -100,10 +110,6 @@ export default function CartView({
       </main>
     );
   }
-
-  const subtotal = items.reduce((sum, item) => sum + item.price, 0);
-  const chargesTotal = charges.reduce((sum, c) => sum + c.price, 0);
-  const total = subtotal + chargesTotal;
 
   return (
     <main className="flex-1 max-w-6xl mx-auto w-full px-3 py-8">
@@ -181,10 +187,12 @@ export default function CartView({
               <span className="text-muted">
                 Subtotal ({items.length} {items.length === 1 ? "item" : "items"})
               </span>
-              <span className="text-text">{formatMillimes(subtotal)}</span>
+              <span className="text-text" data-testid="cart-subtotal">
+                {formatMillimes(totals.subtotal)}
+              </span>
             </div>
             {charges.map((c) => (
-              <div key={c.id} className="flex justify-between">
+              <div key={c.id} className="flex justify-between" data-testid="cart-charge">
                 <span className="text-muted">{c.name}</span>
                 <span className="text-text">{c.displayPrice || formatMillimes(c.price)}</span>
               </div>
@@ -194,7 +202,9 @@ export default function CartView({
           <div className="border-t border-border-custom pt-4 flex items-center justify-between">
             <span className="font-semibold text-text">Total</span>
             <div className="text-right">
-              <div className="text-xl font-bold text-text">{formatMillimes(total)}</div>
+              <div className="text-xl font-bold text-text" data-testid="cart-total">
+                {formatMillimes(totals.total)}
+              </div>
             </div>
           </div>
 

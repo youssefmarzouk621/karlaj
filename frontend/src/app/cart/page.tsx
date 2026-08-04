@@ -22,6 +22,9 @@ export interface CartArtwork {
   previews: { url: string; width: number; height: number }[];
 }
 
+// One line of the order summary's extra charges, read off the cart's own
+// `cart_extra_charges` snapshot (id is that snapshot row's, not the admin
+// ExtraCharge's).
 export interface CartCharge {
   id: string;
   name: string;
@@ -36,22 +39,22 @@ export default async function CartPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get(CART_COOKIE)?.value;
 
-  const [cart, charges] = await Promise.all([
-    token
-      ? prisma.cart.findUnique({
-          where: { token },
-          include: {
-            items: {
-              include: {
-                artwork: { include: { images: true } },
-              },
-              orderBy: { createdAt: "desc" },
+  const cart = token
+    ? await prisma.cart.findUnique({
+        where: { token },
+        include: {
+          items: {
+            include: {
+              artwork: { include: { images: true } },
             },
+            orderBy: { createdAt: "desc" },
           },
-        })
-      : null,
-    prisma.extraCharge.findMany({ where: { enabled: true }, orderBy: { sortOrder: "asc" } }),
-  ]);
+          // Snapshot taken when the cart was last repriced, not the current
+          // admin config — what this cart costs was settled then.
+          charges: { orderBy: { sortOrder: "asc" } },
+        },
+      })
+    : null;
 
   // Price was computed once, when the item was added to the cart (size price
   // x palette multiplier), and stored on the CartItem — read it straight off
@@ -77,12 +80,19 @@ export default async function CartPage() {
     };
   });
 
-  const cartCharges: CartCharge[] = charges.map((c) => ({
+  const cartCharges: CartCharge[] = (cart?.charges ?? []).map((c) => ({
     id: c.id,
     name: c.name,
     price: c.price,
     displayPrice: c.displayPrice,
   }));
 
-  return <CartView items={items} charges={cartCharges} />;
+  return (
+    <CartView
+      items={items}
+      charges={cartCharges}
+      subtotal={cart?.subtotal ?? 0}
+      total={cart?.total ?? 0}
+    />
+  );
 }
