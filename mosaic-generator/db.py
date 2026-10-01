@@ -74,8 +74,9 @@ def load_palette_colors() -> list[dict] | None:
 
 
 def load_parts() -> list[dict] | None:
-    """Enabled parts, ordered by sort_order. `variable` on the 1x1 part is the
-    max 1x1 fraction cap."""
+    """Enabled bricks, ordered by sort_order. `variable` on the 1x1 part is the
+    max 1x1 fraction cap. Bases (kind = 'BASE') are what the mosaic is built on,
+    not something to tile with, so they're excluded."""
     conn = _connect()
     if conn is None:
         return None
@@ -83,7 +84,7 @@ def load_parts() -> list[dict] | None:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT name, part_id, width, height, variable FROM parts "
-                "WHERE enabled = 1 ORDER BY sort_order ASC"
+                "WHERE enabled = 1 AND kind = 'BRICK' ORDER BY sort_order ASC"
             )
             rows = cur.fetchall()
         if not rows:
@@ -98,6 +99,35 @@ def load_parts() -> list[dict] | None:
             }
             for r in rows
         ]
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def load_base() -> dict | None:
+    """The base the mosaic is built on: the first enabled `kind = 'BASE'` part
+    by sort_order. The dashboard only lets bases be enabled if they fit every
+    enabled brick, so when several are enabled any of them is valid; the first
+    is used. None (no base, or DB unavailable) keeps the pre-base behavior."""
+    conn = _connect()
+    if conn is None:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, part_id, width, height FROM parts "
+                "WHERE enabled = 1 AND kind = 'BASE' ORDER BY sort_order ASC LIMIT 1"
+            )
+            r = cur.fetchone()
+        if not r:
+            return None
+        return {
+            "width": int(r["width"]),
+            "height": int(r["height"]),
+            "part_id": r["part_id"],
+            "name": r["name"],
+        }
     except Exception:
         return None
     finally:

@@ -154,11 +154,14 @@ async function main() {
   for (let i = 0; i < PARTS.length; i++) {
     const p = PARTS[i];
     await prisma.part.upsert({
-      where: { width_height: { width: p.width, height: p.height } },
+      where: { partId: p.partId },
+      // `enabled` is deliberately not in `update`: which parts are live is
+      // chosen in the dashboard (e.g. round-only), and re-seeding must not
+      // switch the square plates back on.
       update: {
         name: p.name,
-        partId: p.partId,
-        enabled: true,
+        width: p.width,
+        height: p.height,
         variable: p.variable,
         weightGrams: p.weightGrams,
         sortOrder: i,

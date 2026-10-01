@@ -18,7 +18,7 @@ def _rgb_to_color(rgb):
     return HexColor(f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}")
 
 
-def _draw_mosaic(c, placements, rows, cols, x, y, max_w, max_h):
+def _draw_mosaic(c, placements, rows, cols, x, y, max_w, max_h, layout=None):
     cell = min(max_w / cols, max_h / rows) if cols and rows else 0
     for p in placements:
         bw, bh = p["brick_width"], p["brick_height"]
@@ -28,6 +28,24 @@ def _draw_mosaic(c, placements, rows, cols, x, y, max_w, max_h):
         c.setStrokeColor(HexColor("#444444"))
         c.setLineWidth(0.25)
         c.rect(cx, cy, bw * cell, bh * cell, fill=1, stroke=1)
+
+    # Base seams, numbered like the bags so the builder knows which bag goes where.
+    if layout:
+        c.setStrokeColor(black)
+        c.setLineWidth(1.2)
+        base_w, base_h = layout["base_width"] * cell, layout["base_height"] * cell
+        top = y + rows * cell
+        for i in range(layout["count"]):
+            r, col = divmod(i, layout["cols"])
+            bx, by_top = x + col * base_w, top - r * base_h
+            w = min(base_w, x + cols * cell - bx)
+            h = min(base_h, by_top - y)
+            c.rect(bx, by_top - h, w, h, fill=0, stroke=1)
+            c.setFillColor(HexColor("#ffffff"))
+            c.circle(bx + 3 * mm, by_top - 3 * mm, 2.2 * mm, fill=1, stroke=1)
+            c.setFillColor(black)
+            c.setFont("Helvetica-Bold", 7)
+            c.drawCentredString(bx + 3 * mm, by_top - 3.8 * mm, str(i + 1))
 
 
 def _draw_parts_table(c, parts, start_y, title):
@@ -63,6 +81,30 @@ def _draw_parts_table(c, parts, start_y, title):
     return y
 
 
+def _draw_base_table(c, layout, start_y):
+    """Bases and the pins that join them — not placements, so not in the BOM."""
+    y = start_y
+    c.setFont("Helvetica-Bold", 14)
+    c.setFillColor(black)
+    c.drawString(MARGIN, y, "Bases")
+    y -= 8 * mm
+    c.setFont("Helvetica", 9)
+    rows = [(f"{layout['name']} ({layout['part_id']})", layout["count"])]
+    if layout["pins"]["quantity"]:
+        pins = layout["pins"]
+        rows.append((f"{pins['name']} ({pins['part_id']})", pins["quantity"]))
+    for name, qty in rows:
+        c.drawString(MARGIN + 15 * mm, y, name)
+        c.drawString(MARGIN + 115 * mm, y, str(qty))
+        y -= 7 * mm
+    if not layout["exact"]:
+        c.setFillColor(HexColor("#aa5500"))
+        c.drawString(MARGIN + 15 * mm, y, "The mosaic doesn't fill its last row/column of bases; those studs stay bare.")
+        c.setFillColor(black)
+        y -= 7 * mm
+    return y - 8 * mm
+
+
 def generate_pdf(mosaic_data: dict) -> bytes:
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -78,14 +120,26 @@ def generate_pdf(mosaic_data: dict) -> bytes:
     c.setFont("Helvetica", 14)
     c.setFillColor(HexColor("#555555"))
     c.drawCentredString(PAGE_W / 2, y, f"{width} x {height} studs  •  {mosaic_data['total_parts']} pieces")
+    layout = mosaic_data.get("base_layout")
+    if layout:
+        y -= 7 * mm
+        c.setFont("Helvetica", 11)
+        c.drawCentredString(
+            PAGE_W / 2, y,
+            f"Built on {layout['count']} x {layout['name']} "
+            f"({layout['rows']} x {layout['cols']})  •  one bag per base",
+        )
     y -= 20 * mm
 
     preview_max = min(PAGE_W - 2 * MARGIN, y - MARGIN)
     _draw_mosaic(c, mosaic_data["placements"], height, width,
-                 x=MARGIN, y=y - preview_max, max_w=preview_max, max_h=preview_max)
+                 x=MARGIN, y=y - preview_max, max_w=preview_max, max_h=preview_max,
+                 layout=layout)
 
     c.showPage()
     y = PAGE_H - MARGIN
+    if layout:
+        y = _draw_base_table(c, layout, y)
     _draw_parts_table(c, mosaic_data["parts_list"], y, "Complete Parts List (Bricklink BOM)")
 
     c.save()

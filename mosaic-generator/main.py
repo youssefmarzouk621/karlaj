@@ -23,7 +23,8 @@ from mosaic import prepare_source, quantize
 from bricks import index_grid_to_color_grid, fit_bricks, build_parts_list, DEFAULT_PARTS
 from bags import organize_bags
 from pdf import generate_pdf
-from db import load_palette_colors, load_parts
+from db import load_base, load_palette_colors, load_parts
+from base import base_layout
 
 app = FastAPI(title="mosaic-generator API")
 
@@ -61,6 +62,10 @@ async def process(
     # immediately); fall back to the built-in defaults if the DB is unavailable.
     palette = Palette(load_palette_colors() or BRICK_COLORS)
     parts = load_parts() or DEFAULT_PARTS
+    # The board it's built on. None (no base enabled / DB down) = no seam rule,
+    # free-form bags, no base in the response — the pre-base behavior.
+    base = load_base()
+    layout = base_layout(width, height, base)
 
     try:
         cropped = prepare_source(image_bytes, width, height)
@@ -78,10 +83,11 @@ async def process(
     # follow the shape (this is what makes the physical build follow it).
     index_grid, rgb_small = quantize(cropped, palette, width, height,
                                      priority=priority)
-    placements, index_grid = fit_bricks(index_grid, palette, parts, priority=priority)
+    placements, index_grid = fit_bricks(index_grid, palette, parts, priority=priority,
+                                        base=base)
     grid = index_grid_to_color_grid(index_grid, palette)
     parts_list = build_parts_list(placements)
-    bags = organize_bags(placements, width, height)
+    bags = organize_bags(placements, width, height, layout)
 
     mosaic_data = {
         "width": width,
@@ -90,6 +96,7 @@ async def process(
         "placements": placements,
         "parts_list": parts_list,
         "total_parts": len(placements),
+        "base_layout": layout,
         "preprocessing": {"profile": "mosaic-generator", "steps": [], "metrics": {}},
     }
 

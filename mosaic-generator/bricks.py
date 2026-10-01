@@ -135,9 +135,14 @@ def _placement(palette: Palette, color_index: int, r: int, c: int,
 
 def _greedy_fit(grid: np.ndarray, palette: Palette,
                 expanded: list[tuple[int, int, str, str]],
-                detail: np.ndarray | None = None) -> list[dict]:
+                detail: np.ndarray | None = None,
+                cell: tuple[int, int] | None = None) -> list[dict]:
     """Greedy top-left scan; at each uncovered stud place the largest brick that
     fits (in bounds, uncovered, all one color). 1x1 is always in the catalog.
+
+    `cell` is the base size as (height, width) in studs. When given, no brick
+    may straddle a base seam, so each base can be built on its own and then
+    pinned to its neighbours.
 
     `detail` is an optional boolean mask of studs that should be built from
     small plates. Inside it, bricks are capped at `MAX_DETAIL_AREA`, and no
@@ -159,6 +164,11 @@ def _greedy_fit(grid: np.ndarray, palette: Palette,
                 if in_detail and bh * bw > MAX_DETAIL_AREA:
                     continue
                 if r + bh > rows or c + bw > cols:
+                    continue
+                if cell is not None and (
+                    r // cell[0] != (r + bh - 1) // cell[0]
+                    or c // cell[1] != (c + bw - 1) // cell[1]
+                ):
                     continue
                 if covered[r:r + bh, c:c + bw].any():
                     continue
@@ -236,7 +246,8 @@ def _detail_plans(priority: np.ndarray | None) -> list[np.ndarray | None]:
 
 def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
                max_1x1_fraction: float | None = None,
-               priority: np.ndarray | None = None) -> tuple[list[dict], np.ndarray]:
+               priority: np.ndarray | None = None,
+               base: dict | None = None) -> tuple[list[dict], np.ndarray]:
     """Merge same-color studs into the enabled plates, keeping 1x1s at or under
     the cap.
 
@@ -253,9 +264,13 @@ def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
     plates whose edges follow the subject; the background merges into big
     plates, which frees enough budget to pay for it.
 
+    `base` (from `db.load_base`) keeps every brick inside a single base: no
+    plate crosses a seam between two bases.
+
     Returns (placements, grid_used) — `grid_used` is the lightly-despeckled index
     grid the placements were built from, so the color grid agrees with them.
     """
+    cell = (int(base["height"]), int(base["width"])) if base else None
     # Protect isolated studs only along a subject's outline and inside text —
     # there a lone stud is usually signal (a letter stem, a contour that turns
     # a corner). Across a subject's *interior* it is skin texture and sensor
@@ -269,7 +284,7 @@ def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
 
     tiers = _tiers(parts)
     if len(tiers) == 1:                          # only 1x1 available -> all 1x1
-        return _greedy_fit(grid, palette, tiers[0]), grid
+        return _greedy_fit(grid, palette, tiers[0], cell=cell), grid
 
     usable = tiers[:-1]                          # drop the degenerate 1x1-only tier
 
@@ -277,7 +292,7 @@ def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
         """Largest-brick fit under the 1x1 cap; flag says whether the cap held."""
         last: list[dict] = []
         for expanded in usable:                  # biggest bricks first
-            candidate = _greedy_fit(grid, palette, expanded, detail)
+            candidate = _greedy_fit(grid, palette, expanded, detail, cell)
             if _fraction_1x1(candidate) <= cap:
                 return candidate, True
             last = candidate

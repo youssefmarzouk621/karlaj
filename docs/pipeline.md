@@ -68,8 +68,11 @@ next generation with no restart:
 
 - `load_palette_colors()` — colors of the single `enabled` palette, ordered by
   `sort_order`.
-- `load_parts()` — every `enabled` row from `parts`, ordered by `sort_order`.
-  The 1×1 row's `variable` column carries the max-1×1 cap.
+- `load_parts()` — every `enabled` **brick** (`kind = 'BRICK'`) from `parts`,
+  ordered by `sort_order`. The 1×1 row's `variable` column carries the max-1×1 cap.
+- `load_base()` — the first `enabled` **base** (`kind = 'BASE'`, e.g. the 16×16
+  Technic plate 65803). `None` means no base: no seam rule, free-form bags, and
+  `base_layout: null` in the response — the pre-base behavior.
 
 Both talk to the shared MySQL database over `DATABASE_URL` (raw PyMySQL — the
 table/column names are the contract with
@@ -192,6 +195,12 @@ cap falls back to a smaller-plate catalog — more parts overall, which dilutes 
 unavoidable isolated 1×1s back under the limit. If no tier makes the cap (rare),
 the smallest-plate tier's result is used as best effort.
 
+**d. Base seams.** When a base is configured, no plate may straddle the seam
+between two bases (`cell` in `_greedy_fit`), so each base is a self-contained
+sub-build that is pinned to its neighbours afterwards. Measured on four sample
+photos at 48×48 with the 7 square plates: part count **−2% to +10%**. With
+round 1×1 only it changes nothing.
+
 Edge cases: if 1×1 is the only enabled shape, the artwork is all 1×1 and the cap
 is ignored — there's nothing to cap against. If 1×1 is *disabled*, it's added
 back internally anyway to guarantee coverage.
@@ -242,10 +251,24 @@ A brick is assigned to the section containing its **top-left stud**, so a plate
 straddling a boundary ships in the earlier bag — bag `total_parts` values are
 therefore only approximately equal.
 
+**With a base, each bag is exactly one base** (numbered row by row, matching
+the numbers drawn on the PDF preview), and the bag-count target/cap don't apply:
+the base grid fixes the count. Plates never cross a seam, so a bag holds
+exactly its base's parts. A 48×48 all-1×1 mosaic is 9 bags of 256.
+
+The base grid itself comes from [`base.py`](../mosaic-generator/base.py):
+`ceil(width / base_width) × ceil(height / base_height)` bases, plus
+`PINS_PER_SEAM` (2 — an assumption, confirm on a physical base) Technic pins
+(2780) per shared edge. A size that isn't a multiple of the base is covered by
+rounding up, `exact: false`, and the uncovered studs stay bare.
+
 ### 8. PDF — [`pdf.py`](../mosaic-generator/pdf.py)
 
 Page 1 is a scaled preview drawn placement by placement (each at its real brick
-size, so larger plates show as single tiles); page 2+ is the parts table. Built
+size, so larger plates show as single tiles), with base seams and base/bag
+numbers overlaid when a base is configured; page 2+ is the bases + pins table
+(when there is a base) and then the parts table. Bases and pins are *not* in
+`parts_list` — it stays an aggregate of placements. Built
 eagerly during `/process` and held in the in-process `jobs` dict, then served by
 `GET /pdf/{job_id}`.
 
@@ -277,6 +300,11 @@ logged, not fatal, and display falls back to a live client-side canvas draw.
   "parts_list": [ { "part_id": "3023", "color_id": 86, "quantity": 137, ... } ],
   "total_parts": 1129,           // == placements.length, not the stud count
   "bags": [ { "bag_number": 1, "section": {...}, "parts": [...], "total_parts": 68 } ],
+  "base_layout": {               // null when no base is enabled
+    "part_id": "65803", "name": "16x16 Technic Base", "base_width": 16, "base_height": 16,
+    "rows": 3, "cols": 3, "count": 9, "exact": true,
+    "pins": { "part_id": "2780", "name": "Technic Pin with Friction", "quantity": 24 }
+  },
   "preprocessing": { "profile": "mosaic-generator", "steps": [], "metrics": {} }
 }
 ```
@@ -329,7 +357,9 @@ palette is swapped in, check its neutral coverage first.
 | Knob | Effect | Where |
 |---|---|---|
 | Enabled palette + its colors | The color vocabulary of every mosaic | Dashboard → Palettes (`palettes`/`colors` tables) |
-| Enabled parts | Which plate shapes the tiler may use | Dashboard → Parts (`parts.enabled`) |
+| Enabled parts | Which plate shapes the tiler may use | Dashboard → Parts → Bricks (`parts.enabled`) |
+| Enabled base | Seam rule, bags per base, base/pin counts | Dashboard → Parts → Bases (`kind = 'BASE'`) |
+| `PINS_PER_SEAM` | Pins per shared base edge (2) | [`base.py`](../mosaic-generator/base.py) |
 | 1×1 cap | Max share of the build that may be 1×1 | `parts.variable` on the 1×1 row; falls back to `MAX_1X1_FRACTION = 0.35` |
 | `TARGET_PARTS_PER_BAG`, `MAX_BAGS` | Bag count and size | [`bags.py`](../mosaic-generator/bags.py) |
 | `MIN_SIZE` / `MAX_SIZE` | Accepted stud dimensions | [`main.py`](../mosaic-generator/main.py) |

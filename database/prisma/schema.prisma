@@ -175,14 +175,26 @@ model Color {
   @@map("colors")
 }
 
-/// A brick/plate the generator may use. `variable` on the 1x1 part is the max
+/// What a Part is: a BRICK is tiled into the mosaic by the generator; a BASE is
+/// the plate the mosaic is built on (e.g. the 16x16 Technic plate 65803 whose
+/// side holes let several bases pin together). Bases are never placed by the
+/// generator.
+enum PartKind {
+  BRICK
+  BASE
+}
+
+/// A brick/plate the generator may use, or a base (see PartKind). `variable` on the 1x1 part is the max
 /// fraction of the artwork that may be 1x1 (e.g. 0.35); null elsewhere.
 /// `weightGrams` is the weight of a single piece, used to convert between the
-/// piece count and purchased weight of inventory.
+/// piece count and purchased weight of inventory. Unique on the BrickLink
+/// `partId`, not on the footprint: two parts can share a size (e.g. the 1x1
+/// square plate 3024 and the 1x1 round plate 4073).
 model Part {
   id          String   @id @default(uuid())
   name        String   @db.VarChar(100)
-  partId      String   @map("part_id") @db.VarChar(50)
+  partId      String   @unique @map("part_id") @db.VarChar(50)
+  kind        PartKind @default(BRICK)
   width       Int
   height      Int
   enabled     Boolean  @default(true)
@@ -194,7 +206,12 @@ model Part {
 
   inventory InventoryItem[]
 
-  @@unique([width, height])
+  // Which bricks fit on which base. Only meaningful BRICK <-> BASE: a brick's
+  // `compatibleBases`, a base's `compatibleBricks` (the same link, both sides).
+  compatibleBases  Part[] @relation("PartBaseCompatibility")
+  compatibleBricks Part[] @relation("PartBaseCompatibility")
+
+  @@index([width, height])
   @@map("parts")
 }
 
