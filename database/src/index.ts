@@ -22,3 +22,4 @@ export * from "@prisma/client";
 export * from "./settings";
 export * from "./cartPricing";
 export default prisma;
+export * from "./siteImages";

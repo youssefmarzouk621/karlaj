@@ -5,7 +5,11 @@ import type { SizeOption } from "@/components/SizeSelector";
 // Always read the latest sizes + flags from the DB (dashboard edits take effect at once).
 export const dynamic = "force-dynamic";
 
-export default async function CreatePage() {
+export default async function CreatePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ size?: string }>;
+}) {
   const [rows, customSizeEnabled] = await Promise.all([
     prisma.mosaicSize.findMany({ orderBy: { sortOrder: "asc" } }),
     getCustomSizeEnabled(prisma),
@@ -15,7 +19,18 @@ export default async function CreatePage() {
     height: s.height,
     label: s.label,
     enabled: s.enabled,
+    displayPrice: s.displayPrice,
   }));
 
-  return <CreateFlow sizes={sizes} customSizeEnabled={customSizeEnabled} />;
+  // `?size=48x48` (the pricing page's "Start with…" links) preselects an enabled size.
+  const [w, h] = ((await searchParams).size ?? "").split("x").map(Number);
+  const initialSize = sizes.find((s) => s.enabled && s.width === w && s.height === h);
+
+  return (
+    <CreateFlow
+      sizes={sizes}
+      customSizeEnabled={customSizeEnabled}
+      initialSize={initialSize ? { width: initialSize.width, height: initialSize.height } : undefined}
+    />
+  );
 }

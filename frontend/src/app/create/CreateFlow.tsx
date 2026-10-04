@@ -1,30 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import dynamic from "next/dynamic";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import Stepper from "@/components/Stepper";
 import ImageUpload from "@/components/ImageUpload";
 import SizeSelector, {
   MIN_STUDS,
   MAX_STUDS,
+  sizeCm,
   type SizeOption,
 } from "@/components/SizeSelector";
 import SizePreview from "@/components/SizePreview";
-import BeforeAfterSlider from "@/components/BeforeAfterSlider";
-import RoomMockups from "@/components/RoomMockups";
-import FrameMockups, { hasFrameMockups } from "@/components/FrameMockups";
+import RoomPreview from "@/components/RoomPreview";
+import GeneratingView from "@/components/GeneratingView";
+import ResultViewer from "@/components/ResultViewer";
+import PartsBreakdown from "@/components/PartsBreakdown";
 import type { Placement, Part } from "@/lib/mosaicTypes";
-
-// WebGL can't render on the server, so load the 3D view client-only.
-const Mosaic3D = dynamic(() => import("@/components/Mosaic3D"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[360px] items-center justify-center rounded-xl border border-border-custom bg-surface text-sm text-muted">
-      Loading 3D preview…
-    </div>
-  ),
-});
 
 interface MosaicResult {
   job_id: string;
@@ -48,21 +39,31 @@ interface MosaicResult {
   }[];
 }
 
+/** Fallback wording when the server's reply carries no message of its own. */
+function friendlyStatus(status: number): string {
+  if (status === 413) return "That image is too large. Please choose one under 20 MB.";
+  if (status >= 500) return "Something went wrong on our side. Please try again in a moment.";
+  return "We couldn't build your mosaic. Please check your photo and try again.";
+}
+
 const STEPS = ["Upload photo", "Pick size", "Get your kit"];
 
 export default function CreateFlow({
   sizes,
   customSizeEnabled,
+  initialSize,
 }: {
   sizes: SizeOption[];
   customSizeEnabled: boolean;
+  /** Size to start on instead of the smallest enabled one (e.g. from the pricing page). */
+  initialSize?: { width: number; height: number };
 }) {
   const enabledSizes = sizes.filter((s) => s.enabled);
   // Envelope for the free numeric/drag controls: bounded by the enabled sizes.
   const dims = enabledSizes.flatMap((s) => [s.width, s.height]);
   const maxStud = dims.length ? Math.max(...dims) : MAX_STUDS;
   const minStud = dims.length ? Math.min(...dims) : MIN_STUDS;
-  const defaultSize = enabledSizes[0] ?? { width: minStud, height: minStud };
+  const defaultSize = initialSize ?? enabledSizes[0] ?? { width: minStud, height: minStud };
 
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
@@ -75,6 +76,7 @@ export default function CreateFlow({
   const [cartStatus, setCartStatus] = useState<
     "idle" | "adding" | "in-cart" | "removing"
   >("idle");
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleImageSelected = (f: File, url: string) => {
     setFile(f);
@@ -88,6 +90,8 @@ export default function CreateFlow({
     if (!file) return;
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const formData = new FormData();
     formData.append("image", file);
@@ -95,21 +99,36 @@ export default function CreateFlow({
     formData.append("height", String(height));
 
     try {
-      const res = await fetch("/api/convert", { method: "POST", body: formData });
+      const res = await fetch("/api/convert", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? `Server error (${res.status})`);
+        throw new Error(body?.error ?? friendlyStatus(res.status));
       }
       const data: MosaicResult = await res.json();
       setResult(data);
       setCartStatus("idle");
       setStep(2);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      // Cancelling isn't an error: back to the size step with nothing to report.
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setError(
+          err instanceof TypeError
+            ? "We couldn't reach the server. Check your connection and try again."
+            : err instanceof Error
+              ? err.message
+              : "Something went wrong. Please try again."
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const handleCancel = () => abortRef.current?.abort();
 
   const handleStartOver = () => {
     setFile(null);
@@ -162,327 +181,324 @@ export default function CreateFlow({
     }
   }
 
+  const sizeOption = sizes.find((s) => s.width === width && s.height === height);
+  const resultSize = result
+    ? sizes.find((s) => s.width === result.width && s.height === result.height)
+    : undefined;
+
+  if (loading) {
+    return (
+      <main className="flex-1 w-full max-w-[1120px] mx-auto px-4 md:px-8">
+        <GeneratingView photo={preview} width={width} height={height} onCancel={handleCancel} />
+      </main>
+    );
+  }
+
+  const primaryBtn =
+    "h-14 px-8 rounded-full bg-accent hover:bg-accent-hover disabled:bg-surface-2 disabled:text-ink-3 disabled:cursor-not-allowed disabled:hover:translate-y-0 text-on-accent font-semibold text-base inline-flex items-center justify-center gap-2.5 transition-all hover:-translate-y-px";
+  const secondaryBtn =
+    "h-14 px-6 rounded-full border border-line-strong bg-surface text-ink font-medium text-base hover:bg-surface-2 transition-colors";
+
   return (
-    <main className="flex-1 max-w-4xl mx-auto w-full px-3 py-8">
-      <Link
-        href="/"
-        className="text-sm text-muted hover:text-text mb-6 inline-block transition-colors"
+    <main className="flex-1 w-full mx-auto flex flex-col">
+      <div
+        className={`w-full mx-auto px-4 md:px-8 pt-8 md:pt-12 flex flex-col gap-8 ${
+          step === 0 ? "max-w-[1040px] pb-24" : step === 1 ? "max-w-[1240px] pb-10" : "max-w-[1312px] pb-24"
+        }`}
       >
-        &larr; Back
-      </Link>
-
-      <h1 className="text-3xl font-bold mb-8">Create your LEGO mosaic</h1>
-
-      <Stepper steps={STEPS} current={step} />
-
-      {/* Step 1 — Upload */}
-      {step === 0 && (
-        <section className="space-y-6">
-          <div>
-            <h2 className="text-xl font-bold mb-1">Upload a photo</h2>
-            <p className="text-muted text-sm">
-              Pick a clear, high-contrast image — portraits, pets, logos, or
-              landscapes all work. We&apos;ll center-crop it to match your
-              mosaic size.
-            </p>
-          </div>
-          <ImageUpload onImageSelected={handleImageSelected} preview={preview} />
-          <button
-            onClick={() => setStep(1)}
-            disabled={!file}
-            className="w-full bg-accent hover:bg-accent-hover disabled:bg-border-custom disabled:text-muted disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors text-lg"
-          >
-            Continue
-          </button>
-        </section>
-      )}
-
-      {/* Step 2 — Size + live preview */}
-      {step === 1 && (
-        <section className="space-y-6">
-          <div>
-            <h2 className="text-xl font-bold mb-1">Pick your size</h2>
-            <p className="text-muted text-sm">
-              Bigger mosaics capture more detail but use more bricks and bags.
-              The preview shows exactly how your photo will be cropped.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-6 items-start">
-            <SizeSelector
-              sizes={sizes}
-              width={width}
-              height={height}
-              minStud={minStud}
-              maxStud={maxStud}
-              customSizeEnabled={customSizeEnabled}
-              onChange={(w, h) => {
-                setWidth(w);
-                setHeight(h);
-              }}
-            />
-
-            <SizePreview
-              preview={preview}
-              width={width}
-              height={height}
-              maxStud={maxStud}
-              customSizeEnabled={customSizeEnabled}
-              enabledSizes={enabledSizes}
-              onChange={(w, h) => {
-                setWidth(w);
-                setHeight(h);
-              }}
-            />
-          </div>
-
-          {error && <p className="text-accent text-center text-sm">{error}</p>}
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => setStep(0)}
-              disabled={loading}
-              className="px-6 py-3 rounded-xl border border-border-custom text-muted hover:text-text hover:border-text/30 transition-colors font-medium disabled:opacity-50"
+        {step < 2 && (
+          <div className="flex flex-col gap-4">
+            <Link
+              href="/"
+              className="self-start inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-ink transition-colors"
             >
+              <ArrowLeftIcon />
               Back
-            </button>
-            <button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="flex-1 bg-accent hover:bg-accent-hover disabled:bg-border-custom disabled:text-muted disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors text-lg flex items-center justify-center gap-2"
-            >
-              {loading && (
-                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              )}
-              {loading ? "Building your mosaic..." : "Generate mosaic"}
-            </button>
+            </Link>
+            <h1 className="font-display font-normal text-5xl md:text-6xl leading-none tracking-[-0.025em]">
+              Create your LEGO mosaic
+            </h1>
           </div>
-        </section>
-      )}
+        )}
 
-      {/* Step 3 — Result */}
-      {step === 2 && result && (
-        <section className="space-y-12">
-          <div>
-            <h2 className="text-xl font-bold mb-1">Your LEGO mosaic is ready</h2>
-            <p className="text-muted text-sm">
-              Spin the 3D model, picture it on your wall, and compare it with
-              your photo. The full parts list and bag-by-bag steps come in the
-              printed manual and the downloadable PDF.
-            </p>
-          </div>
+        <Stepper steps={STEPS} current={step} />
 
-          {/* 3D model of the finished mosaic */}
-          <div className="grid gap-6 sm:grid-cols-10 sm:items-center">
-            <div className="sm:col-span-7">
-              <Mosaic3D
-                key={result.job_id}
+        {/* Step 1 — Upload */}
+        {step === 0 && (
+          <section className="flex flex-col gap-8">
+            <div className="flex flex-col gap-2 mt-2">
+              <h2 className="text-2xl font-semibold">Upload a photo</h2>
+              <p className="text-base leading-relaxed text-ink-2">
+                Pick a clear, high-contrast image — portraits, pets, logos, or landscapes all work.
+                We&apos;ll center-crop it to match your mosaic size.
+              </p>
+            </div>
+            <ImageUpload onImageSelected={handleImageSelected} preview={preview} />
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-4">
+              <span className="flex gap-2 items-center text-sm text-ink-2">
+                <LockIcon />
+                Your photo is only used to build your mosaic.
+              </span>
+              <button onClick={() => setStep(1)} disabled={!file} className={primaryBtn}>
+                Continue
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Step 2 — Size + live preview */}
+        {step === 1 && (
+          <section className="grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 mt-2">
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-2xl font-semibold">Pick your size</h2>
+                <p className="text-base leading-relaxed text-ink-2">
+                  Bigger mosaics capture more detail but use more bricks and bags. The preview shows
+                  exactly how your photo will be cropped.
+                </p>
+              </div>
+
+              <SizeSelector
+                sizes={sizes}
+                width={width}
+                height={height}
+                minStud={minStud}
+                maxStud={maxStud}
+                customSizeEnabled={customSizeEnabled}
+                onChange={(w, h) => {
+                  setWidth(w);
+                  setHeight(h);
+                }}
+              />
+
+              <dl className="rounded-3xl bg-surface border border-line p-6 grid grid-cols-2 gap-x-4 gap-y-5">
+                <div className="col-span-2 flex justify-between items-baseline pb-4 border-b border-line">
+                  <dt className="sr-only">Selected size</dt>
+                  <dd className="font-display text-4xl tracking-[-0.02em] leading-none">
+                    {width} × {height}
+                  </dd>
+                  {sizeOption?.displayPrice && (
+                    <dd className="text-[28px] font-semibold">{sizeOption.displayPrice}</dd>
+                  )}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <dt className="text-[13px] text-ink-2">Finished size</dt>
+                  <dd className="text-base font-semibold">{sizeCm(width, height)}</dd>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <dt className="text-[13px] text-ink-2">Studs</dt>
+                  <dd className="text-base font-semibold">{(width * height).toLocaleString("en-US")}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4 items-start">
+              <SizePreview
+                preview={preview}
+                width={width}
+                height={height}
+                maxStud={maxStud}
+                customSizeEnabled={customSizeEnabled}
+                enabledSizes={enabledSizes}
+                onChange={(w, h) => {
+                  setWidth(w);
+                  setHeight(h);
+                }}
+              />
+              <RoomPreview preview={preview} width={width} height={height} />
+            </div>
+          </section>
+        )}
+
+        {/* Step 3 — Result */}
+        {step === 2 && result && (
+          <section className="flex flex-col gap-8">
+            <div className="flex flex-col gap-3 max-w-[820px]">
+              <h2 className="font-display font-normal text-5xl md:text-6xl leading-none tracking-[-0.035em]">
+                Your LEGO mosaic is ready
+              </h2>
+              <p className="text-[17px] leading-relaxed text-ink-2">
+                Spin the 3D model, picture it on your wall, and compare it with your photo. The full
+                parts list and bag-by-bag steps come in the printed manual and the downloadable PDF.
+              </p>
+            </div>
+
+            <div className="grid lg:grid-cols-[minmax(0,8fr)_minmax(0,4fr)] gap-6 items-start">
+              <ResultViewer
+                jobId={result.job_id}
+                photo={preview}
                 gridRows={result.height}
                 gridCols={result.width}
                 placements={result.placements}
                 colorMap={colorMap}
               />
-            </div>
-            <ResultBadge
-              className="sm:col-span-3"
-              icon={<CubeIcon />}
-              label="3D Preview"
-              title="See your LEGO® mosaic come to life"
-              description="Explore your design in 3D and adjust the view from every angle."
-            />
-          </div>
 
-          {/* See it in your space — photo frames where we have them, drawn scenes otherwise */}
-          <div className="grid gap-6 sm:grid-cols-2 sm:items-center">
-            <ResultBadge
-              className="sm:order-1"
-              icon={<ImageIcon />}
-              label="Image Preview"
-              title="Visualize it in your space"
-              description="See how your mosaic looks as wall art in a real-life setting."
-            />
-            <div className="sm:order-2">
-              {hasFrameMockups(result.width, result.height) ? (
-                <FrameMockups
-                  gridRows={result.height}
-                  gridCols={result.width}
-                  placements={result.placements}
-                  colorMap={colorMap}
-                />
-              ) : (
-                <RoomMockups
-                  gridRows={result.height}
-                  gridCols={result.width}
-                  placements={result.placements}
-                  colorMap={colorMap}
-                />
-              )}
+              <aside className="lg:sticky lg:top-24 rounded-[32px] bg-surface border border-line shadow-md p-6 md:p-8 flex flex-col gap-6">
+                <div className="flex flex-col gap-2.5">
+                  <span className="self-start px-2.5 py-1 rounded-full bg-accent-soft text-accent-ink text-xs font-semibold">
+                    Custom design
+                  </span>
+                  <h3 className="font-display font-normal text-[44px] leading-none tracking-[-0.02em]">
+                    LEGO Mosaic
+                  </h3>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-[18px]">
+                  <Fact label="Size" value={`${result.width} × ${result.height} studs`} />
+                  <Fact label="Finished" value={sizeCm(result.width, result.height)} />
+                  <Fact label="Parts" value={result.total_parts.toLocaleString("en-US")} />
+                  <Fact label="Colors" value={String(new Set(result.parts_list.map((p) => p.color_id)).size)} />
+                </dl>
+                {resultSize?.displayPrice && (
+                  <>
+                    <div className="h-px bg-line" />
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-sm text-ink-2">Price</span>
+                      <span className="text-[32px] font-semibold tracking-[-0.01em]">
+                        {resultSize.displayPrice}
+                      </span>
+                    </div>
+                  </>
+                )}
+                <button
+                  onClick={handleCartToggle}
+                  disabled={cartStatus === "adding" || cartStatus === "removing"}
+                  className={`h-14 rounded-full font-semibold text-base flex items-center justify-center gap-2.5 transition-all disabled:cursor-not-allowed disabled:opacity-60 active:scale-[.98] ${
+                    cartStatus === "in-cart"
+                      ? "border border-accent text-accent-ink bg-accent-soft hover:bg-surface"
+                      : "bg-accent hover:bg-accent-hover text-on-accent hover:-translate-y-px"
+                  }`}
+                >
+                  {(cartStatus === "adding" || cartStatus === "removing") && (
+                    <span className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
+                  )}
+                  {cartStatus === "adding" && "Adding…"}
+                  {cartStatus === "removing" && "Removing…"}
+                  {cartStatus === "in-cart" && "Remove from Cart"}
+                  {cartStatus === "idle" && (
+                    <>
+                      <CartIcon />
+                      Add to Cart
+                    </>
+                  )}
+                </button>
+                <a
+                  href={`/api/pdf/${result.job_id}`}
+                  download
+                  className="h-[52px] rounded-full border border-line-strong bg-surface text-ink text-[15px] font-medium flex items-center justify-center gap-2.5 hover:bg-surface-2 transition-colors"
+                >
+                  <DownloadIcon />
+                  Download Instructions PDF
+                </a>
+                <div className="flex justify-center gap-5 text-sm text-ink-2">
+                  <button onClick={() => setStep(1)} className="hover:text-ink transition-colors">
+                    Change size
+                  </button>
+                  <button onClick={handleStartOver} className="hover:text-ink transition-colors">
+                    Start over
+                  </button>
+                </div>
+              </aside>
             </div>
-          </div>
 
-          {/* Before/after comparison */}
-          <div className="grid gap-6 sm:grid-cols-2 sm:items-center">
-            <BeforeAfterSlider
-              key={result.job_id}
-              beforeSrc={preview ?? ""}
+            <PartsBreakdown
+              jobId={result.job_id}
               gridRows={result.height}
               gridCols={result.width}
               placements={result.placements}
               colorMap={colorMap}
+              partsList={result.parts_list}
+              totalParts={result.total_parts}
+              bags={result.bags}
             />
-            <ResultBadge
-              icon={<CompareIcon />}
-              label="Before & After"
-              title="From photo to brick masterpiece"
-              description="See the magic of transformation from your photo to a LEGO® mosaic."
-            />
-          </div>
+          </section>
+        )}
+      </div>
 
-          {/* Ready to build + download */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                <PdfIcon />
-              </span>
-              <div>
-                <h3 className="font-semibold text-text">Ready to build?</h3>
-                <p className="text-sm text-muted">
-                  Download your personalized PDF instructions and start
-                  building your masterpiece.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:shrink-0">
-              <button
-                onClick={handleCartToggle}
-                disabled={cartStatus === "adding" || cartStatus === "removing"}
-                className={`inline-flex items-center justify-center gap-2 font-medium px-5 py-2.5 rounded-lg transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-60 ${
-                  cartStatus === "in-cart"
-                    ? "border border-accent text-accent hover:bg-accent/10"
-                    : "border border-border-custom text-text hover:border-text/30"
-                }`}
-              >
-                {(cartStatus === "adding" || cartStatus === "removing") && (
-                  <span className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
-                )}
-                {cartStatus === "adding" && "Adding…"}
-                {cartStatus === "removing" && "Removing…"}
-                {cartStatus === "in-cart" && "Remove from Cart"}
-                {cartStatus === "idle" && (
-                  <>
-                    Add to Cart
-                    <CartIcon />
-                  </>
-                )}
+      {/* Step 2 action bar, pinned to the bottom of the viewport. */}
+      {step === 1 && (
+        <div className="mt-auto sticky bottom-0 z-20 px-4 md:px-8 py-4 bg-glass backdrop-blur-[18px] border-t border-line">
+          <div className="max-w-[1176px] mx-auto flex flex-col gap-3">
+            {error && (
+              <p role="alert" className="rounded-2xl bg-danger-soft text-danger text-sm px-4 py-3">
+                {error}
+              </p>
+            )}
+            <div className="flex items-center gap-3 md:gap-4">
+              <button onClick={() => setStep(0)} className={secondaryBtn}>
+                Back
               </button>
-              <a
-                href={`/api/pdf/${result.job_id}`}
-                download
-                className="inline-flex shrink-0 items-center gap-2 bg-accent hover:bg-accent-hover text-white font-medium px-5 py-2.5 rounded-lg transition-colors text-sm"
-              >
-                Download Instructions PDF
-                <DownloadIcon />
-              </a>
+              <span className="ml-auto flex flex-col items-end">
+                <span className="text-[13px] text-ink-2">
+                  {width} × {height} · {sizeCm(width, height)}
+                </span>
+                {sizeOption?.displayPrice && (
+                  <span className="text-xl font-semibold">{sizeOption.displayPrice}</span>
+                )}
+              </span>
+              <button onClick={handleGenerate} className={primaryBtn}>
+                Generate mosaic
+                <ArrowRightIcon />
+              </button>
             </div>
           </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={() => setStep(1)}
-              className="px-6 py-3 rounded-xl border border-border-custom text-muted hover:text-text hover:border-text/30 transition-colors font-medium"
-            >
-              Change size
-            </button>
-            <button
-              onClick={handleStartOver}
-              className="px-6 py-3 rounded-xl border border-border-custom text-muted hover:text-text hover:border-text/30 transition-colors font-medium"
-            >
-              Start over
-            </button>
-          </div>
-        </section>
+        </div>
       )}
     </main>
   );
 }
 
-/** Icon + eyebrow label + heading + description, used next to each result preview. */
-function ResultBadge({
-  icon,
-  label,
-  title,
-  description,
-  className = "",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  title: string;
-  description: string;
-  className?: string;
-}) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div className={className}>
-      <div className="mb-3 flex items-center gap-2 text-accent">
-        {icon}
-        <span className="text-xs font-semibold uppercase tracking-wide">
-          {label}
-        </span>
-      </div>
-      <h3 className="text-xl font-bold text-text">{title}</h3>
-      <p className="mt-2 text-sm text-muted">{description}</p>
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-[13px] text-ink-2">{label}</dt>
+      <dd className="m-0 text-base font-semibold">{value}</dd>
     </div>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
   );
 }
 
 function CartIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <circle cx={9} cy={20} r={1} />
-      <circle cx={18} cy={20} r={1} />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h2l2.4 12.2a1 1 0 0 0 1 .8h8.6a1 1 0 0 0 1-.8L20 8H6" />
-    </svg>
-  );
-}
-
-function CubeIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5 12 3 3 7.5m18 0-9 4.5m9-4.5v9L12 21m0-9L3 7.5m9 4.5v9m-9-9v9l9 4.5" />
-    </svg>
-  );
-}
-
-function ImageIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <rect x={3} y={3} width={18} height={18} rx={2} />
-      <circle cx={8.5} cy={8.5} r={1.5} />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m21 15-5-5L5 21" />
-    </svg>
-  );
-}
-
-function CompareIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M8 7 5 10l3 3M16 7l3 3-3 3" />
-    </svg>
-  );
-}
-
-function PdfIcon() {
-  return (
-    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+      <path d="M3 6h18" />
+      <path d="M16 10a4 4 0 0 1-8 0" />
     </svg>
   );
 }
 
 function DownloadIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 15V3" />
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5" />
     </svg>
   );
 }

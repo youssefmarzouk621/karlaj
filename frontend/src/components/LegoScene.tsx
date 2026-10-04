@@ -179,11 +179,11 @@ export default function LegoScene() {
   return (
     <div className="w-full h-full min-h-[400px]">
       <Canvas
-        camera={{ position: [12, 10, 12], fov: 35 }}
+        camera={{ position: [18, 15, 18], fov: 35 }}
         gl={{ antialias: true, alpha: true }}
       >
-        <color attach="background" args={["#0F0F0F"]} />
-        <fog attach="fog" args={["#0F0F0F", 22, 45]} />
+        <color attach="background" args={["#151413"]} />
+        <fog attach="fog" args={["#151413", 22, 45]} />
         <Scene />
         <OrbitControls
           enablePan={false}

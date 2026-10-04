@@ -18,7 +18,7 @@ const VB_W = 640;
 const VB_H = 480;
 const FLOOR_Y = 360;
 
-type Variant = "living" | "entry" | "gallery";
+export type Variant = "living" | "entry" | "gallery";
 
 const SCENES: { variant: Variant; label: string }[] = [
   { variant: "living", label: "Living room" },
@@ -158,6 +158,34 @@ function Scene({
   );
 }
 
+/** One scale-accurate room scene with `src` framed on the wall, as an SVG. */
+export function RoomScene({
+  variant,
+  label,
+  gridRows,
+  gridCols,
+  src,
+}: {
+  variant: Variant;
+  label: string;
+  gridRows: number;
+  gridCols: number;
+  src: string | null;
+}) {
+  const frameW = gridCols * STUD_CM * PX_PER_CM;
+  const frameH = gridRows * STUD_CM * PX_PER_CM;
+  return (
+    <svg
+      viewBox={`0 0 ${VB_W} ${VB_H}`}
+      className="block h-full w-full"
+      role="img"
+      aria-label={`Your mosaic shown in a ${label.toLowerCase()} setting`}
+    >
+      <Scene variant={variant} frameW={frameW} frameH={frameH} src={src} />
+    </svg>
+  );
+}
+
 /**
  * Shows the finished mosaic composited into three scale-accurate room scenes,
  * so the buyer can picture the piece on their wall at its real size.
@@ -183,25 +211,16 @@ export default function RoomMockups({
     return () => cancelAnimationFrame(raf);
   }, [gridRows, gridCols, placements, colorMap]);
 
-  const frameW = gridCols * STUD_CM * PX_PER_CM;
-  const frameH = gridRows * STUD_CM * PX_PER_CM;
   const label = sizeCm(gridCols, gridRows);
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       {SCENES.map((s) => (
         <figure key={s.variant} className="m-0">
-          <div className="overflow-hidden rounded-xl border border-border-custom bg-surface">
-            <svg
-              viewBox={`0 0 ${VB_W} ${VB_H}`}
-              className="block h-full w-full"
-              role="img"
-              aria-label={`Your mosaic shown in a ${s.label.toLowerCase()} setting`}
-            >
-              <Scene variant={s.variant} frameW={frameW} frameH={frameH} src={src} />
-            </svg>
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+            <RoomScene variant={s.variant} label={s.label} gridRows={gridRows} gridCols={gridCols} src={src} />
           </div>
-          <figcaption className="mt-1.5 text-center text-xs text-muted">
+          <figcaption className="mt-1.5 text-center text-xs text-ink-2">
             {s.label} · {label}
           </figcaption>
         </figure>

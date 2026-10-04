@@ -379,3 +379,24 @@ model CartItem {
   @@index([cartId])
   @@map("cart_items")
 }
+
+// ---------------------------------------------------------------------------
+// Site images (managed in the dashboard, served by the frontend)
+// ---------------------------------------------------------------------------
+
+/// An admin-uploaded image for a named slot on the public site (see
+/// SITE_IMAGE_SLOTS in src/siteImages.ts). One row per slot; no row means the
+/// frontend falls back to its bundled default artwork. The bytes live in the
+/// database so the dashboard and frontend need no shared filesystem.
+model SiteImage {
+  slot      String   @id @db.VarChar(50)
+  mimeType  String   @map("mime_type") @db.VarChar(50)
+  data      Bytes    @db.LongBlob
+  alt       String   @default("") @db.VarChar(255)
+  /// Optional caption, for slots that show one (e.g. the gallery cards).
+  title     String   @default("") @db.VarChar(100)
+  meta      String   @default("") @db.VarChar(100)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_images")
+}

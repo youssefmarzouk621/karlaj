@@ -97,24 +97,39 @@ export default function SizePreview({
   };
 
   const handle =
-    "absolute z-10 h-4 w-4 rounded-full border-2 border-accent bg-white shadow " +
+    "absolute z-10 h-3.5 w-3.5 rounded-full bg-white shadow-md " +
     "pointer-events-auto touch-none";
 
   return (
-    <div>
-      <p className="text-xs text-muted mb-2">Crop &amp; size — drag any corner</p>
+    <div className="rounded-[28px] bg-surface-2 p-5 flex flex-col gap-3.5">
+      <span className="flex justify-between text-[13px] font-semibold">
+        Crop
+        <span className="font-normal text-ink-2">Drag any corner</span>
+      </span>
 
       <div
         ref={frameRef}
         onPointerMove={onMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative mx-auto aspect-square w-full max-w-[340px] touch-none select-none rounded-xl border border-dashed border-border-custom bg-surface"
+        className="relative mx-auto aspect-square w-full max-w-[420px] touch-none select-none rounded-2xl bg-surface overflow-hidden"
       >
+        {/* The whole photo, dimmed, so the crop reads as a window onto it. */}
+        {preview && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+
         {/* The mosaic box, centered and resizable. */}
         <div className="absolute left-1/2 top-1/2" style={boxStyle}>
           {/* Clipped crop preview. */}
-          <div className="absolute inset-0 overflow-hidden rounded-md ring-2 ring-accent">
+          <div className="absolute inset-0 overflow-hidden ring-2 ring-white shadow-[0_0_0_9999px_rgba(17,16,15,.45)]">
             {preview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -124,42 +139,22 @@ export default function SizePreview({
                 className="pointer-events-none h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs text-muted">
+              <div className="flex h-full w-full items-center justify-center text-xs text-ink-2">
                 No image
               </div>
             )}
-            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+            <span className="pointer-events-none absolute bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[rgba(17,16,15,.7)] backdrop-blur-sm px-2.5 py-1 text-xs font-semibold text-white">
               {width} × {height} · {sizeCm(width, height)}
             </span>
           </div>
 
           {/* Corner handles (outside the clip so they aren't cut off). */}
-          <div
-            onPointerDown={startDrag}
-            style={{ cursor: "nwse-resize" }}
-            className={`${handle} -left-2 -top-2`}
-          />
-          <div
-            onPointerDown={startDrag}
-            style={{ cursor: "nesw-resize" }}
-            className={`${handle} -right-2 -top-2`}
-          />
-          <div
-            onPointerDown={startDrag}
-            style={{ cursor: "nesw-resize" }}
-            className={`${handle} -bottom-2 -left-2`}
-          />
-          <div
-            onPointerDown={startDrag}
-            style={{ cursor: "nwse-resize" }}
-            className={`${handle} -bottom-2 -right-2`}
-          />
+          <div onPointerDown={startDrag} style={{ cursor: "nwse-resize" }} className={`${handle} -left-[7px] -top-[7px]`} />
+          <div onPointerDown={startDrag} style={{ cursor: "nesw-resize" }} className={`${handle} -right-[7px] -top-[7px]`} />
+          <div onPointerDown={startDrag} style={{ cursor: "nesw-resize" }} className={`${handle} -bottom-[7px] -left-[7px]`} />
+          <div onPointerDown={startDrag} style={{ cursor: "nwse-resize" }} className={`${handle} -bottom-[7px] -right-[7px]`} />
         </div>
       </div>
-
-      <p className="mt-2 text-center text-xs text-muted">
-        {width} × {height} studs · ~{sizeCm(width, height)}
-      </p>
     </div>
   );
 }

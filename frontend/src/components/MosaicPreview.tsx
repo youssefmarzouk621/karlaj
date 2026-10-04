@@ -23,7 +23,7 @@ function MosaicPreview({ gridRows, gridCols, placements, colorMap }: Props) {
   }, [placements, colorMap, gridRows, gridCols]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border-custom bg-surface p-2">
+    <div className="overflow-hidden">
       <canvas
         ref={canvasRef}
         className="mx-auto block w-full h-auto"

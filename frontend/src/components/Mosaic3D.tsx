@@ -11,6 +11,8 @@ interface Props {
   gridCols: number;
   placements: DrawPlacement[];
   colorMap: Record<number, [number, number, number]>;
+  /** Overrides the default framed 360px box (e.g. to fill a viewer panel). */
+  className?: string;
 }
 
 const BRICK_H = 1.0; // brick body height, in stud units
@@ -119,11 +121,12 @@ export default function Mosaic3D({
   gridCols,
   placements,
   colorMap,
+  className = "relative h-[360px] rounded-2xl border border-line bg-bg",
 }: Props) {
   const maxDim = Math.max(gridRows, gridCols);
 
   return (
-    <div className="relative h-[360px] w-full overflow-hidden rounded-xl border border-border-custom bg-bg">
+    <div className={`w-full overflow-hidden ${className}`}>
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
@@ -164,7 +167,7 @@ export default function Mosaic3D({
         />
       </Canvas>
 
-      <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/45 px-3 py-1 text-[11px] font-medium text-white">
+      <span className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/10 backdrop-blur-[10px] border border-white/10 px-3.5 py-2 text-[13px] text-[#F2EEE7]">
         Drag to rotate · scroll to zoom
       </span>
     </div>

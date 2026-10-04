@@ -40,7 +40,7 @@ export default function FrameMockups({
     <div className="grid gap-4 sm:grid-cols-2">
       {frames.map((f) => (
         <figure key={f.src} className="m-0">
-          <div className="relative overflow-hidden rounded-xl border border-border-custom">
+          <div className="relative overflow-hidden rounded-2xl border border-line">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={f.src}
@@ -65,7 +65,7 @@ export default function FrameMockups({
               />
             )}
           </div>
-          <figcaption className="mt-1.5 text-center text-xs text-muted">
+          <figcaption className="mt-1.5 text-center text-xs text-ink-2">
             {f.label}
           </figcaption>
         </figure>

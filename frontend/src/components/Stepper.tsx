@@ -5,60 +5,71 @@ interface Props {
   current: number;
 }
 
+/** Progress through the create flow: a glass pill on desktop, a compact bar on phones. */
 export default function Stepper({ steps, current }: Props) {
   return (
-    <div className="flex items-start mb-10">
-      {steps.map((label, i) => {
-        const isComplete = i < current;
-        const isActive = i === current;
-        return (
-          <div key={label} className="flex items-start flex-1 last:flex-none">
-            <div className="flex flex-col items-center gap-2 shrink-0">
-              <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${
-                  isComplete
-                    ? "bg-accent border-accent text-white"
-                    : isActive
-                    ? "border-accent text-accent bg-accent/10"
-                    : "border-border-custom text-muted"
+    <>
+      <div
+        role="list"
+        aria-label="Progress"
+        className="hidden md:flex items-center gap-3 py-2 pl-2 pr-5 rounded-full bg-glass backdrop-blur-[16px] border border-line shadow-sm"
+      >
+        {steps.map((label, i) => {
+          const done = i < current;
+          const active = i === current;
+          return (
+            <div
+              key={label}
+              role="listitem"
+              aria-current={active ? "step" : undefined}
+              className={`flex items-center gap-3 ${i < steps.length - 1 ? "flex-1" : ""}`}
+            >
+              <span
+                className={`w-9 h-9 shrink-0 rounded-full grid place-items-center text-[13px] font-semibold transition-all duration-300 ${
+                  done
+                    ? "bg-accent text-on-accent"
+                    : active
+                      ? "bg-ink text-bg"
+                      : "text-ink-2 shadow-[inset_0_0_0_1px_var(--line-strong)]"
                 }`}
               >
-                {isComplete ? (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={3}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5 13l4 4L19 7"
-                    />
+                {done ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6 9 17l-5-5" />
                   </svg>
                 ) : (
                   i + 1
                 )}
-              </div>
-              <span
-                className={`text-xs font-medium whitespace-nowrap ${
-                  isActive ? "text-text" : "text-muted"
-                }`}
-              >
+              </span>
+              <span className={`text-sm whitespace-nowrap ${active ? "font-semibold text-ink" : "font-medium text-ink-2"}`}>
                 {label}
               </span>
+              {i < steps.length - 1 && (
+                <span className="relative flex-1 min-w-6 h-0.5 rounded-sm bg-line-strong overflow-hidden">
+                  <span
+                    className="absolute inset-y-0 left-0 bg-accent transition-[width] duration-500"
+                    style={{ width: done ? "100%" : "0%" }}
+                  />
+                </span>
+              )}
             </div>
-            {i !== steps.length - 1 && (
-              <div
-                className={`flex-1 h-0.5 mx-2 mt-[18px] transition-colors ${
-                  isComplete ? "bg-accent" : "bg-border-custom"
-                }`}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      <div className="md:hidden flex flex-col gap-2.5">
+        <div className="flex justify-between text-[13px]">
+          <span className="text-ink-2">
+            Step {current + 1} of {steps.length}
+          </span>
+          <span className="font-semibold text-ink">{steps[current]}</span>
+        </div>
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${steps.length}, 1fr)` }}>
+          {steps.map((s, i) => (
+            <span key={s} className={`h-1 rounded ${i <= current ? "bg-accent" : "bg-surface-2"}`} />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }

@@ -99,7 +99,7 @@ export default function BeforeAfterSlider({
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative w-full cursor-ew-resize touch-none select-none overflow-hidden rounded-xl border border-border-custom bg-surface"
+        className="relative w-full cursor-ew-resize touch-none select-none overflow-hidden rounded-2xl border border-line bg-surface"
         style={{ aspectRatio: `${gridCols} / ${gridRows}` }}
       >
         {/* AFTER — the mosaic, base layer */}
@@ -124,13 +124,13 @@ export default function BeforeAfterSlider({
 
         {/* Corner labels */}
         <span
-          className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-2 py-0.5 text-xs font-medium text-white transition-opacity"
+          className="pointer-events-none absolute left-2 top-2 rounded-full bg-[rgba(27,25,22,.6)] backdrop-blur-sm px-3 py-1.5 text-[13px] font-medium text-white transition-opacity"
           style={{ opacity: pos > 8 ? 1 : 0 }}
         >
           Before
         </span>
         <span
-          className="pointer-events-none absolute right-2 top-2 rounded-md bg-black/55 px-2 py-0.5 text-xs font-medium text-white transition-opacity"
+          className="pointer-events-none absolute right-2 top-2 rounded-full bg-[rgba(27,25,22,.6)] backdrop-blur-sm px-3 py-1.5 text-[13px] font-medium text-white transition-opacity"
           style={{ opacity: pos < 92 ? 1 : 0 }}
         >
           After
@@ -169,7 +169,7 @@ export default function BeforeAfterSlider({
         </div>
       </div>
 
-      <p className="mt-2 text-center text-xs text-muted">
+      <p className="mt-2 text-center text-xs text-ink-2">
         Drag to compare your photo with the mosaic
       </p>
     </div>

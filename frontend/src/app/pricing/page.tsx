@@ -1,134 +1,143 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { prisma } from "@/lib/db";
+import { getHomeImages } from "@/lib/siteImages";
+import { sizeCm } from "@/lib/studs";
 
-const PLANS = [
-  {
-    name: "Starter",
-    price: "Free",
-    period: "",
-    description: "Try it out with small mosaics",
-    features: [
-      "Up to 32 x 32 studs",
-      "PDF instruction booklet",
-      "Full parts list",
-      "3 mosaics per month",
-    ],
-    cta: "Get started",
-    href: "/create",
-    accent: false,
-  },
-  {
-    name: "Pro",
-    price: "$12",
-    period: "/mo",
-    description: "For serious builders and gifters",
-    features: [
-      "Up to 96 x 96 studs",
-      "PDF instruction booklet",
-      "Unlimited mosaics",
-      "Priority processing",
-      "High-res PDF export",
-    ],
-    cta: "Start free trial",
-    href: "/create",
-    accent: true,
-  },
-  {
-    name: "Studio",
-    price: "$39",
-    period: "/mo",
-    description: "For businesses and creators",
-    features: [
-      "Everything in Pro",
-      "Custom color palettes",
-      "API access",
-      "Bulk generation",
-      "White-label PDF branding",
-      "Priority support",
-    ],
-    cta: "Contact us",
-    href: "/create",
-    accent: false,
-  },
+// Prices come from the dashboard (sizes + extra charges), so render per request.
+export const dynamic = "force-dynamic";
+
+const INCLUDED = [
+  { title: "Mixed brick sizes", text: "Fewer pieces, faster builds, crisper edges." },
+  { title: "Numbered bags", text: "One bag per section, built in order." },
+  { title: "Booklet + PDF", text: "Step-by-step instructions, plus a download." },
+  { title: "Premium Frame Kit", text: "Matching wood frame, included." },
 ];
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const [sizes, charges, img] = await Promise.all([
+    prisma.mosaicSize.findMany({ orderBy: { sortOrder: "asc" } }).catch(() => []),
+    prisma.extraCharge
+      .findMany({ where: { enabled: true }, orderBy: { sortOrder: "asc" } })
+      .catch(() => []),
+    getHomeImages(),
+  ]);
+
+  const maxDim = Math.max(1, ...sizes.flatMap((s) => [s.width, s.height]));
+  const art = img.sizes_art;
+
   return (
-    <main className="flex-1 px-6 md:px-12 py-20">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-16">
-          <p className="text-accent font-semibold text-sm tracking-widest uppercase mb-3">
-            Pricing
-          </p>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight">
-            Simple, transparent pricing
+    <main className="flex-1 w-full max-w-[1312px] mx-auto px-4 md:px-8 pt-12 md:pt-20 pb-24 flex flex-col gap-14">
+      <div className="grid lg:grid-cols-[7fr_5fr] gap-8 lg:gap-12 items-end">
+        <div className="flex flex-col gap-4">
+          <span className="text-xs tracking-[.14em] uppercase font-semibold text-accent-ink">Pricing</span>
+          <h1 className="font-display font-normal text-[3rem] md:text-[4.5rem] leading-[.98] tracking-[-0.035em]">
+            Priced by size.
+            <br />
+            <em className="text-ink-2">Everything included.</em>
           </h1>
-          <p className="text-muted mt-4 text-lg max-w-md mx-auto">
-            Start for free. Upgrade when you need bigger mosaics or unlimited
-            builds.
-          </p>
         </div>
+        <p className="text-lg leading-relaxed text-ink-2">
+          One price per size covers the bricks, numbered bags, instruction booklet, PDF and the
+          premium frame kit.
+          {charges.length > 0 && (
+            <>
+              {" "}
+              Added at checkout:{" "}
+              {charges
+                .map((c) => `${c.name} ${c.displayPrice || `${c.price / 1000} TND`}`)
+                .join(", ")}
+              .
+            </>
+          )}
+        </p>
+      </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.name}
-              className={`rounded-2xl p-8 border flex flex-col ${
-                plan.accent
-                  ? "border-accent bg-accent/5"
-                  : "border-border-custom bg-surface"
-              }`}
-            >
-              {plan.accent && (
-                <span className="text-accent text-xs font-bold uppercase tracking-widest mb-4">
-                  Most popular
-                </span>
-              )}
-              <h2 className="text-xl font-bold">{plan.name}</h2>
-              <p className="text-muted text-sm mt-1">{plan.description}</p>
-
-              <div className="mt-6 mb-6">
-                <span className="text-4xl font-black">{plan.price}</span>
-                {plan.period && (
-                  <span className="text-muted text-sm">{plan.period}</span>
-                )}
-              </div>
-
-              <ul className="space-y-3 mb-8 flex-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-sm">
-                    <svg
-                      className={`w-4 h-4 mt-0.5 shrink-0 ${
-                        plan.accent ? "text-accent" : "text-muted"
-                      }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span className="text-muted">{f}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href={plan.href}
-                className={`block text-center py-3 rounded-lg font-medium text-sm transition-colors ${
-                  plan.accent
-                    ? "bg-accent hover:bg-accent-hover text-white"
-                    : "bg-surface border border-border-custom hover:border-muted text-text"
+      {sizes.length === 0 ? (
+        <p className="rounded-3xl bg-surface border border-line p-10 text-center text-ink-2">
+          Pricing is being updated — check back shortly.
+        </p>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {sizes.map((s) => {
+            const label = `${s.width} × ${s.height}`;
+            return (
+              <div
+                key={s.id}
+                data-testid="price-card"
+                className={`rounded-[28px] bg-surface border border-line p-7 flex flex-col gap-6 transition-all duration-300 ${
+                  s.enabled ? "hover:-translate-y-1 hover:shadow-lg" : "opacity-60"
                 }`}
               >
-                {plan.cta}
-              </Link>
-            </div>
-          ))}
+                <div className="flex justify-between items-start min-h-[120px]">
+                  <div className="flex flex-col gap-1.5">
+                    <h2 className="font-display font-normal text-[2.75rem] leading-none tracking-[-0.02em]">
+                      {label}
+                    </h2>
+                    <span className="text-sm text-ink-2">{sizeCm(s.width, s.height)}</span>
+                    {!s.enabled && (
+                      <span className="self-start mt-2 px-2.5 py-1 rounded-full bg-surface-2 text-xs font-semibold">
+                        Coming soon
+                      </span>
+                    )}
+                  </div>
+                  {/* The artwork drawn at this size's proportions. */}
+                  <div className="w-[120px] h-[120px] flex items-end justify-end">
+                    <img
+                      src={art.src}
+                      alt=""
+                      className="object-cover rounded-[3px] shadow-md"
+                      style={{
+                        width: `${(s.width / maxDim) * 120}px`,
+                        height: `${(s.height / maxDim) * 120}px`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-[2.5rem] font-semibold tracking-[-0.02em] leading-none">
+                  {s.displayPrice || <span className="text-xl text-ink-2 font-medium">Pricing soon</span>}
+                </div>
+
+                <ul className="pt-4 border-t border-line flex flex-col gap-2.5 text-sm">
+                  <li className="flex justify-between">
+                    <span className="text-ink-2">Finished size</span>
+                    <span className="font-semibold">{sizeCm(s.width, s.height)}</span>
+                  </li>
+                  <li className="flex justify-between">
+                    <span className="text-ink-2">Studs</span>
+                    <span className="font-semibold">{(s.width * s.height).toLocaleString("en-US")}</span>
+                  </li>
+                </ul>
+
+                {s.enabled ? (
+                  <Link
+                    href={`/create?size=${s.width}x${s.height}`}
+                    className="h-[52px] rounded-full bg-surface-2 hover:bg-ink hover:text-bg text-ink font-semibold text-[15px] flex items-center justify-center transition-colors"
+                  >
+                    Start with {label}
+                  </Link>
+                ) : (
+                  <span
+                    aria-disabled="true"
+                    className="h-[52px] rounded-full bg-surface-2 text-ink-3 font-semibold text-[15px] flex items-center justify-center cursor-not-allowed"
+                  >
+                    Not available yet
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
+      )}
+
+      <div className="rounded-[28px] bg-surface border border-line p-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        {INCLUDED.map((i) => (
+          <div key={i.title} className="flex flex-col gap-2">
+            <span className="text-base font-semibold">{i.title}</span>
+            <span className="text-sm leading-normal text-ink-2">{i.text}</span>
+          </div>
+        ))}
       </div>
     </main>
   );

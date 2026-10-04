@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo, Familjen_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import Providers from "@/components/Providers";
+import { auth } from "@/auth";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const archivo = Archivo({
+  variable: "--font-archivo",
   subsets: ["latin"],
+});
+
+// Display face for headings (variable weight, upright + italic).
+const familjen = Familjen_Grotesk({
+  variable: "--font-familjen",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
 });
 
 const geistMono = Geist_Mono({
@@ -18,20 +28,25 @@ export const metadata: Metadata = {
   description: "Turn any photo into a buildable LEGO mosaic with instruction booklet",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
     <html
       lang="en"
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${archivo.variable} ${familjen.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col pt-16">
-        <Header />
-        {children}
+      <body className="min-h-full flex flex-col pt-[60px] md:pt-[72px]">
+        <Providers session={session}>
+          <Header />
+          {children}
+          <Footer />
+        </Providers>
       </body>
     </html>
   );

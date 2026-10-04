@@ -1,35 +1,127 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* BrickArt design tokens (from the Claude Design redesign). */
 :root {
-  --bg: #0F0F0F;
-  --surface: #1A1A1A;
-  --border: #2A2A2A;
-  --text: #F5F0EB;
-  --muted: #8A8580;
-  --accent: #C4533A;
-  --accent-hover: #D4634A;
-  --highlight: #E8A84C;
+  --bg: #F5F2EC;          /* warm off-white ground */
+  --surface: #FFFFFF;     /* cards, inputs */
+  --surface-2: #EDE8E0;   /* sunken fills, tracks */
+  --ink: #1B1916;         /* primary text */
+  --ink-2: #5C564E;       /* secondary text */
+  --ink-3: #8A8379;       /* placeholders / disabled only */
+  --line: rgba(27,25,22,.10);
+  --line-strong: rgba(27,25,22,.18);
+  --accent: #C2401E;      /* single accent — white text 5.0:1 */
+  --accent-hover: #A8361A;
+  --accent-ink: #A8361A;  /* accent used as text */
+  --accent-soft: #F5E3DB;
+  --on-accent: #FFFFFF;
+  --danger: #B42318;
+  --danger-soft: #FBE9E7;
+  --success: #2F6B3F;
+  --glass: rgba(245,242,236,.72);
+  --shadow-sm: 0 1px 2px rgba(27,25,22,.06), 0 1px 1px rgba(27,25,22,.04);
+  --shadow-md: 0 2px 4px rgba(27,25,22,.04), 0 8px 24px -6px rgba(27,25,22,.10);
+  --shadow-lg: 0 4px 8px rgba(27,25,22,.04), 0 24px 56px -12px rgba(27,25,22,.18);
+  --shadow-art: 0 2px 2px rgba(0,0,0,.06), 0 12px 24px -8px rgba(0,0,0,.18), 0 40px 80px -24px rgba(0,0,0,.30);
+}
+[data-theme="dark"] {
+  --bg: #11100F;
+  --surface: #1A1917;
+  --surface-2: #23211E;
+  --ink: #F2EEE7;
+  --ink-2: #A9A399;
+  --ink-3: #6F6A62;
+  --line: rgba(255,255,255,.08);
+  --line-strong: rgba(255,255,255,.16);
+  --accent: #E8714B;      /* dark text on accent 6.9:1 */
+  --accent-hover: #F08A66;
+  --accent-ink: #F08A66;
+  --accent-soft: #3A2119;
+  --on-accent: #1A0C06;
+  --danger: #F2786A;
+  --danger-soft: #3B1A16;
+  --success: #7CC48E;
+  --glass: rgba(17,16,15,.68);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 2px 4px rgba(0,0,0,.3), 0 8px 24px -6px rgba(0,0,0,.5);
+  --shadow-lg: 0 4px 8px rgba(0,0,0,.3), 0 24px 56px -12px rgba(0,0,0,.6);
+  --shadow-art: 0 12px 24px -8px rgba(0,0,0,.5), 0 40px 80px -24px rgba(0,0,0,.7);
 }
 
 @theme inline {
+  --font-display: var(--font-familjen), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono);
+
   --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-border-custom: var(--border);
-  --color-text: var(--text);
-  --color-muted: var(--muted);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
-  --color-highlight: var(--highlight);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-glass: var(--glass);
+
+  /* Legacy names still used by pages that haven't been redesigned yet
+     (create, cart, pricing, login). Remove as each page moves to the new tokens. */
+  --color-text: var(--ink);
+  --color-muted: var(--ink-2);
+  --color-border-custom: var(--line);
+  --color-highlight: var(--accent);
+
+  --radius-sm: .625rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-art: var(--shadow-art);
+
+  --ease-out-soft: cubic-bezier(.2,.7,.2,1);
 }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+@layer base {
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+  ::selection { background: var(--accent-soft); }
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Create flow: bricks dropping into place while a mosaic is generated. */
+@keyframes brick-drop {
+  0% { transform: translateY(-28px) scale(.85); opacity: 0 }
+  9%, 82% { transform: none; opacity: 1 }
+  96%, 100% { opacity: 0 }
+}
+@keyframes pulse-bar {
+  0% { left: -40% }
+  100% { left: 100% }
 }

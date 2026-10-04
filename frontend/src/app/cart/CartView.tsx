@@ -96,14 +96,21 @@ export default function CartView({
 
   if (items.length === 0) {
     return (
-      <main className="flex-1 max-w-4xl mx-auto w-full px-3 py-20 text-center">
-        <h1 className="text-3xl font-bold mb-3">Your cart is empty</h1>
-        <p className="text-muted mb-8">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center gap-5 text-center">
+        <div className="grid grid-cols-4 gap-1.5" aria-hidden>
+          {Array.from({ length: 8 }, (_, i) => (
+            <span key={i} className={`w-[22px] h-[22px] rounded-full ${i === 2 ? "bg-accent" : "bg-surface-2"}`} />
+          ))}
+        </div>
+        <h1 className="font-display font-normal text-5xl leading-none tracking-[-0.02em]">
+          Your cart is empty
+        </h1>
+        <p className="text-base leading-relaxed text-ink-2 max-w-[420px] text-balance">
           Generate a mosaic and add it to your cart to see it here.
         </p>
         <Link
           href="/create"
-          className="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-white font-semibold px-6 py-3 rounded-xl transition-colors"
+          className="h-[52px] px-[26px] rounded-full bg-accent hover:bg-accent-hover text-on-accent font-semibold text-[15px] inline-flex items-center transition-colors"
         >
           Create a mosaic
         </Link>
@@ -112,65 +119,74 @@ export default function CartView({
   }
 
   return (
-    <main className="flex-1 max-w-6xl mx-auto w-full px-3 py-8">
-      <Link
-        href="/create"
-        className="text-sm text-muted hover:text-text mb-6 inline-flex items-center gap-1.5 transition-colors"
-      >
-        <ArrowLeftIcon /> Continue shopping
-      </Link>
+    <main className="flex-1 w-full max-w-[1240px] mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-24 flex flex-col gap-10">
+      <div className="flex flex-col gap-4">
+        <Link
+          href="/create"
+          className="self-start inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-ink transition-colors"
+        >
+          <ArrowLeftIcon /> Continue shopping
+        </Link>
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <h1 className="font-display font-normal text-6xl md:text-7xl leading-none tracking-[-0.03em]">
+            Your cart
+          </h1>
+          <span className="text-base text-ink-2">
+            {items.length} {items.length === 1 ? "mosaic" : "mosaics"} ready to build
+          </span>
+        </div>
+      </div>
 
-      <h1 className="text-3xl font-bold mb-1">Your cart</h1>
-      <p className="text-muted text-sm mb-8">
-        {items.length} {items.length === 1 ? "mosaic" : "mosaics"} ready to build
-      </p>
+      {error && (
+        <p role="alert" className="rounded-2xl bg-danger-soft text-danger text-sm px-4 py-3">
+          {error}
+        </p>
+      )}
 
-      {error && <p className="text-accent text-sm mb-4">{error}</p>}
-
-      <div className="grid lg:grid-cols-[1fr_360px] gap-8 items-start">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_400px] gap-8 items-start">
         {/* Items */}
-        <div className="space-y-5">
-          {items.map((item) => (
-            <CartItemCard
-              key={item.artworkId}
-              item={item}
-              removing={removingId === item.artworkId}
-              onRemove={handleRemove}
-            />
-          ))}
+        <div className="flex flex-col gap-10">
+          <div className="flex flex-col gap-5">
+            {items.map((item) => (
+              <CartItemCard
+                key={item.artworkId}
+                item={item}
+                removing={removingId === item.artworkId}
+                onRemove={handleRemove}
+              />
+            ))}
+          </div>
 
           {/* Upsells */}
-          <section className="pt-6">
-            <h2 className="text-xl font-bold mb-4">What comes with the package</h2>
+          <section className="flex flex-col gap-4">
+            <h2 className="text-xl font-semibold">What comes with the package</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {ADDONS.map((addon) => (
                 <div
                   key={addon.name}
-                  className="rounded-xl border border-border-custom bg-surface p-4 flex items-center gap-4"
+                  className="rounded-3xl border border-line bg-surface p-6 flex gap-4"
                 >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                  <span className="w-12 h-12 shrink-0 rounded-[14px] bg-surface-2 grid place-items-center text-ink">
                     {addon.icon}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-text text-sm">{addon.name}</h3>
-                    <p className="text-xs text-muted mt-0.5">{addon.description}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      {addon.included ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-highlight">
-                          <CheckCircleIcon /> Included
-                        </span>
-                      ) : (
-                        <>
-                          <span className="text-sm font-bold text-text">{formatPrice(addon.price!)}</span>
-                          <button
-                            onClick={() => showPreviewNotice(addon.name)}
-                            className="text-xs font-medium border border-border-custom rounded-lg px-3 py-1.5 text-muted hover:text-text hover:border-text/30 transition-colors"
-                          >
-                            Add
-                          </button>
-                        </>
-                      )}
-                    </div>
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <h3 className="font-semibold">{addon.name}</h3>
+                    <p className="text-sm leading-normal text-ink-2">{addon.description}</p>
+                    {addon.included ? (
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-success mt-1">
+                        <CheckIcon /> Included
+                      </span>
+                    ) : (
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="font-semibold">+{formatPrice(addon.price!)}</span>
+                        <button
+                          onClick={() => showPreviewNotice(addon.name)}
+                          className="h-10 px-4 rounded-full border border-line-strong bg-surface text-sm font-medium inline-flex items-center gap-1.5 hover:bg-ink hover:text-bg transition-colors"
+                        >
+                          <PlusIcon /> Add
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -179,87 +195,77 @@ export default function CartView({
         </div>
 
         {/* Order summary */}
-        <aside className="rounded-2xl border border-border-custom bg-surface p-6 lg:sticky lg:top-24 space-y-5">
-          <h2 className="text-lg font-bold text-text">Order summary</h2>
+        <aside className="rounded-[28px] border border-line bg-surface shadow-md p-7 lg:sticky lg:top-24 flex flex-col gap-5">
+          <h2 className="font-display font-normal text-4xl leading-none tracking-[-0.015em]">
+            Order summary
+          </h2>
 
-          <div className="space-y-2 text-sm">
+          <div className="flex flex-col gap-3 text-[15px]">
             <div className="flex justify-between">
-              <span className="text-muted">
+              <span className="text-ink-2">
                 Subtotal ({items.length} {items.length === 1 ? "item" : "items"})
               </span>
-              <span className="text-text" data-testid="cart-subtotal">
+              <span className="font-medium" data-testid="cart-subtotal">
                 {formatMillimes(totals.subtotal)}
               </span>
             </div>
             {charges.map((c) => (
               <div key={c.id} className="flex justify-between" data-testid="cart-charge">
-                <span className="text-muted">{c.name}</span>
-                <span className="text-text">{c.displayPrice || formatMillimes(c.price)}</span>
+                <span className="text-ink-2">{c.name}</span>
+                <span className="font-medium">{c.displayPrice || formatMillimes(c.price)}</span>
               </div>
             ))}
           </div>
 
-          <div className="border-t border-border-custom pt-4 flex items-center justify-between">
-            <span className="font-semibold text-text">Total</span>
-            <div className="text-right">
-              <div className="text-xl font-bold text-text" data-testid="cart-total">
-                {formatMillimes(totals.total)}
-              </div>
-            </div>
+          <div className="flex items-baseline justify-between pt-4 border-t border-line">
+            <span className="text-base font-semibold">Total</span>
+            <span className="text-4xl font-semibold tracking-[-0.02em]" data-testid="cart-total">
+              {formatMillimes(totals.total)}
+            </span>
           </div>
 
           <button
             onClick={() => showPreviewNotice("Checkout")}
-            className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-white font-semibold py-3 rounded-xl transition-colors"
+            className="h-[60px] rounded-full bg-accent hover:bg-accent-hover text-on-accent font-semibold text-[17px] flex items-center justify-center gap-2.5 shadow-[0_10px_24px_-10px_rgba(194,64,30,.7)] transition-all hover:-translate-y-px active:scale-[.98]"
           >
             <LockIcon /> Proceed to checkout
           </button>
 
-          {notice && <p className="text-xs text-center text-muted">{notice}</p>}
+          {notice && (
+            <p role="status" className="text-[13px] text-center text-ink-2">
+              {notice}
+            </p>
+          )}
 
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             <button
               onClick={() => showPreviewNotice("Google Pay")}
-              className="flex-1 border border-border-custom rounded-lg py-2.5 text-sm font-medium text-muted hover:text-text hover:border-text/30 transition-colors"
+              className="h-12 rounded-full border border-line-strong bg-surface text-[15px] font-semibold hover:bg-surface-2 transition-colors"
             >
               Google Pay
             </button>
             <button
               onClick={() => showPreviewNotice("Apple Pay")}
-              className="flex-1 border border-border-custom rounded-lg py-2.5 text-sm font-medium text-muted hover:text-text hover:border-text/30 transition-colors"
+              className="h-12 rounded-full bg-ink text-bg text-[15px] font-semibold hover:opacity-90 transition-opacity"
             >
               Apple Pay
             </button>
           </div>
 
-          <ul className="space-y-3 pt-2 border-t border-border-custom">
-            <li className="flex items-center gap-3 text-xs text-muted">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                <LockIcon />
-              </span>
-              <div>
-                <p className="font-medium text-text">Secure checkout</p>
-                <p>Your details stay encrypted end to end.</p>
-              </div>
-            </li>
-            <li className="flex items-center gap-3 text-xs text-muted">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                <TruckIcon />
-              </span>
-              <div>
-                <p className="font-medium text-text">Fast, reliable delivery</p>
-                <p>Bricks and instructions shipped together.</p>
-              </div>
-            </li>
-            <li className="flex items-center gap-3 text-xs text-muted">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                <ShieldIcon />
-              </span>
-              <div>
-                <p className="font-medium text-text">Satisfaction guaranteed</p>
-                <p>Missing a piece? We&apos;ll ship a replacement.</p>
-              </div>
-            </li>
+          <ul className="pt-4 border-t border-line flex flex-col gap-3.5">
+            {[
+              { icon: <LockIcon />, title: "Secure checkout", text: "Your details stay encrypted end to end." },
+              { icon: <TruckIcon />, title: "Fast, reliable delivery", text: "Bricks and instructions shipped together." },
+              { icon: <ShieldIcon />, title: "Satisfaction guaranteed", text: "Missing a piece? We'll ship a replacement." },
+            ].map((t) => (
+              <li key={t.title} className="flex gap-3">
+                <span className="mt-0.5 shrink-0 text-ink">{t.icon}</span>
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold">{t.title}</span>
+                  <span className="text-[13px] text-ink-2">{t.text}</span>
+                </span>
+              </li>
+            ))}
           </ul>
         </aside>
       </div>
@@ -290,33 +296,40 @@ const CartItemCard = memo(function CartItemCard({
   const priceLabel = item.price > 0 ? formatMillimes(item.price) : "Pricing TBD";
 
   return (
-    <div className="rounded-2xl border border-border-custom bg-surface p-5 sm:flex gap-6">
-      <div className="sm:w-56 shrink-0 mb-4 sm:mb-0">
-        {item.mainUrl ? (
-          <div className="overflow-hidden rounded-xl border border-border-custom bg-surface p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element -- pre-sized
-                static PNG rendered at creation time; next/image's on-request
-                optimization pipeline would add nothing here. */}
-            <img
-              src={item.mainUrl}
-              alt="LEGO mosaic"
-              width={item.mainWidth ?? undefined}
-              height={item.mainHeight ?? undefined}
-              loading="lazy"
-              className="mx-auto block w-full h-auto rounded-lg"
-            />
+    <article className="rounded-[28px] border border-line bg-surface p-5 grid sm:grid-cols-[260px_minmax(0,1fr)] gap-5 sm:gap-7">
+      <div className="flex flex-col gap-2.5">
+        {/* The mosaic, framed like a print on a gallery wall. */}
+        <div className="rounded-[18px] bg-gradient-to-b from-[#E6E2DB] to-[#D6D1C9] aspect-square grid place-items-center p-4">
+          <div className="bg-[#1B1916] p-1.5 shadow-art max-w-full">
+            <div className="bg-[#FBFAF8] p-3.5">
+              {item.mainUrl ? (
+                // Pre-sized static PNG rendered at creation time; next/image's
+                // on-request optimization pipeline would add nothing here.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.mainUrl}
+                  alt="LEGO mosaic"
+                  width={item.mainWidth ?? undefined}
+                  height={item.mainHeight ?? undefined}
+                  loading="lazy"
+                  className="block h-auto max-h-[170px] w-auto max-w-full"
+                />
+              ) : (
+                <div className="w-[150px]">
+                  <MosaicPreview
+                    gridRows={item.height}
+                    gridCols={item.width}
+                    placements={item.placements}
+                    colorMap={colorMap}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        ) : (
-          <MosaicPreview
-            gridRows={item.height}
-            gridCols={item.width}
-            placements={item.placements}
-            colorMap={colorMap}
-          />
-        )}
+        </div>
 
         {item.previews.length > 0 && (
-          <div className="flex gap-2 mt-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {item.previews.map((p) => (
               // eslint-disable-next-line @next/next/no-img-element -- pre-sized static PNG, see the mainUrl note above.
               <img
@@ -326,113 +339,68 @@ const CartItemCard = memo(function CartItemCard({
                 width={p.width}
                 height={p.height}
                 loading="lazy"
-                className="w-14 h-14 rounded-lg border border-border-custom object-cover"
+                className="w-full aspect-[1.4] rounded-[8px] border border-line object-cover"
               />
             ))}
           </div>
         )}
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <h2 className="text-lg font-bold text-text">LEGO Mosaic</h2>
-          <span className="text-xs font-semibold uppercase tracking-wide text-accent bg-accent/10 px-2.5 py-1 rounded-full shrink-0">
+      <div className="flex flex-col gap-[18px] min-w-0 sm:py-2 sm:pr-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <h2 className="font-display font-normal text-4xl leading-none tracking-[-0.015em]">
+              LEGO Mosaic
+            </h2>
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+              <CheckIcon /> Ready to build
+            </span>
+          </div>
+          <span className="shrink-0 px-2.5 py-1 rounded-full bg-accent-soft text-accent-ink text-xs font-semibold">
             Custom design
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted mt-3">
-          <span className="inline-flex items-center gap-1.5">
-            <GridIcon /> {item.width} × {item.height} studs
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <PiecesIcon /> {item.totalParts.toLocaleString("en-US")} parts
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <ClockIcon /> {estimateBuildTime(item.totalParts)}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <GaugeIcon /> {estimateDifficulty(item.totalParts)}
-          </span>
-        </div>
+        <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-2xl bg-bg">
+          {[
+            ["Size (studs)", `${item.width} × ${item.height}`],
+            ["Parts", item.totalParts.toLocaleString("en-US")],
+            ["Build time", estimateBuildTime(item.totalParts)],
+            ["Level", estimateDifficulty(item.totalParts)],
+          ].map(([label, value]) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <dt className="text-xs text-ink-2">{label}</dt>
+              <dd className="m-0 text-[15px] font-semibold">{value}</dd>
+            </div>
+          ))}
+        </dl>
 
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-highlight mt-3 w-fit">
-          <CheckCircleIcon /> Ready to build
-        </span>
-
-        <div className="mt-auto pt-4 flex items-center justify-between">
+        <div className="mt-auto flex items-center justify-between">
           <button
             onClick={() => onRemove(item.artworkId)}
             disabled={removing}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-accent transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            className="-ml-3.5 h-11 px-3.5 rounded-full inline-flex items-center gap-2 text-sm font-medium text-ink-2 hover:bg-danger-soft hover:text-danger transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <TrashIcon /> {removing ? "Removing…" : "Remove"}
           </button>
-          <span className="text-lg font-bold text-text">{priceLabel}</span>
+          <span className="text-[28px] font-semibold">{priceLabel}</span>
         </div>
       </div>
-    </div>
+    </article>
   );
 });
 
 function ArrowLeftIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m0 0 6 6m-6-6 6-6" />
-    </svg>
-  );
-}
-
-function GridIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <rect x={3} y={3} width={7} height={7} rx={1} />
-      <rect x={14} y={3} width={7} height={7} rx={1} />
-      <rect x={3} y={14} width={7} height={7} rx={1} />
-      <rect x={14} y={14} width={7} height={7} rx={1} />
-    </svg>
-  );
-}
-
-function PiecesIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m12 3 9 4.5-9 4.5-9-4.5L12 3Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m3 12 9 4.5 9-4.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m3 16.5 9 4.5 9-4.5" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <circle cx={12} cy={12} r={9} />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
-    </svg>
-  );
-}
-
-function GaugeIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V14M12 20V9M20 20V4" />
-    </svg>
-  );
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <circle cx={12} cy={12} r={9} />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m8.5 12.5 2.5 2.5 5-5" />
     </svg>
   );
 }
 
 function TrashIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -444,7 +412,7 @@ function TrashIcon() {
 
 function LockIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <rect x={5} y={11} width={14} height={9} rx={2} />
       <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
@@ -453,7 +421,7 @@ function LockIcon() {
 
 function TruckIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h11v9H3z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4l3 3v3h-7z" />
       <circle cx={7.5} cy={18} r={1.6} />
@@ -464,7 +432,7 @@ function TruckIcon() {
 
 function ShieldIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
     </svg>
   );
@@ -472,7 +440,7 @@ function ShieldIcon() {
 
 function FrameIcon() {
   return (
-    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <rect x={4} y={4} width={16} height={16} rx={1} />
       <rect x={7.5} y={7.5} width={9} height={9} rx={0.5} />
     </svg>
@@ -481,13 +449,30 @@ function FrameIcon() {
 
 function GiftIcon() {
   return (
-    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <rect x={3} y={9} width={18} height={11} rx={1} />
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M3 9h18M12 9v11M12 9C9 9 8 6.5 9 5c1-1.5 3 0 3 4Zm0 0c3 0 4-2.5 3-4-1-1.5-3 0-3 4Z"
       />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
     </svg>
   );
 }

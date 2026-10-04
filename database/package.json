@@ -24,6 +24,7 @@
     "db:seed": "node seed/seed.mjs",
     "db:seed:smartable": "node seed/seed-smartable-round.mjs",
     "db:seed:bases": "node seed/seed-bases.mjs",
+    "db:seed:site-images": "node seed/seed-site-images.mjs",
     "db:studio": "prisma studio"
   },
   "dependencies": {

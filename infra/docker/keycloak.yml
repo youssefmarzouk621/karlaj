@@ -14,6 +14,8 @@ services:
     volumes:
       - ./data/keycloak:/opt/keycloak/data
       - ./realm-config:/opt/keycloak/data/import
+      # Custom themes (e.g. the BrickArt login theme). Pick one under Realm settings → Themes.
+      - ./themes:/opt/keycloak/themes
     ports:
       - "127.0.0.1:9080:9080"
       - "127.0.0.1:9443:9443"

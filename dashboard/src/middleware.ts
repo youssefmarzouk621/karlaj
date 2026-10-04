@@ -10,5 +10,6 @@ export const config = {
     "/api/parts/:path*",
     "/api/inventory/:path*",
     "/api/settings/:path*",
+    "/api/site-images/:path*",
   ],
 };

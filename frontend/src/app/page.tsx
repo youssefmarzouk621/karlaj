@@ -1,395 +1,289 @@
-"use client";
-
-import dynamic from "next/dynamic";
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import ScrollReveal from "@/components/ScrollReveal";
+import HeroScene from "@/components/home/HeroScene";
+import CompareSlider from "@/components/home/CompareSlider";
+import { getHomeImages } from "@/lib/siteImages";
 
-const LegoScene = dynamic(() => import("@/components/LegoScene"), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full min-h-[400px] bg-surface rounded-2xl flex items-center justify-center">
-      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-    </div>
-  ),
-});
+// Homepage images come from the dashboard (site_images), so render per request.
+export const dynamic = "force-dynamic";
 
-const EXAMPLES = [
-  {
-    title: "Golden Hour Portrait",
-    size: "48 x 48",
-    pieces: 412,
-    colors: [
-      ["#C4533A", "#E8A84C", "#F5F0EB", "#D49A6A"],
-      ["#B45429", "#C08060", "#8A8580", "#E0C0A0"],
-      ["#5C3D2E", "#E8A84C", "#C4533A", "#F5F0EB"],
-      ["#D49A6A", "#B45429", "#8A8580", "#C08060"],
-    ],
-  },
-  {
-    title: "City Skyline",
-    size: "64 x 32",
-    pieces: 587,
-    colors: [
-      ["#1A1A1A", "#2A2A2A", "#3A3A3A", "#8A8580", "#8A8580", "#3A3A3A"],
-      ["#1A1A1A", "#3A3A3A", "#1A1A1A", "#2A2A2A", "#F5F0EB", "#2A2A2A"],
-      ["#2A2A2A", "#1A1A1A", "#3A3A3A", "#1A1A1A", "#2A2A2A", "#1A1A1A"],
-      ["#C4533A", "#C4533A", "#B45429", "#B45429", "#C4533A", "#C4533A"],
-    ],
-  },
-  {
-    title: "Family Pet",
-    size: "32 x 32",
-    pieces: 234,
-    colors: [
-      ["#E0C0A0", "#D49A6A", "#C08060", "#E0C0A0"],
-      ["#D49A6A", "#5C3D2E", "#5C3D2E", "#D49A6A"],
-      ["#C08060", "#4A3228", "#5C3D2E", "#C08060"],
-      ["#E0C0A0", "#D49A6A", "#C08060", "#E0C0A0"],
-    ],
-  },
-  {
-    title: "Abstract Wave",
-    size: "96 x 48",
-    pieces: 1283,
-    colors: [
-      ["#C4533A", "#D4634A", "#E8A84C", "#D4634A", "#C4533A"],
-      ["#B45429", "#C4533A", "#D4634A", "#E8A84C", "#D4634A"],
-      ["#5C3D2E", "#B45429", "#C4533A", "#D4634A", "#E8A84C"],
-      ["#322018", "#5C3D2E", "#B45429", "#C4533A", "#D4634A"],
-    ],
-  },
+const QUOTES = [
+  { text: "It looks like a print until you get close. Then you see every brick.", name: "Amira B.", meta: "64 × 64 · Tunis" },
+  { text: "The numbered bags made a 4,000-piece build feel easy. Two weekends, done.", name: "Youssef K.", meta: "48 × 48 · Sousse" },
+  { text: "Gave it as a gift. The room preview sold me before I ordered.", name: "Lina M.", meta: "32 × 32 · Sfax" },
 ];
 
-function MiniMosaic({ colors }: { colors: string[][] }) {
-  const rows = colors.length;
-  const cols = colors[0].length;
+const SIZES = [
+  { label: "16 × 16", meta: "256 studs · 12.8 cm", px: 64, border: 4 },
+  { label: "48 × 48", meta: "2,304 studs · 38.4 cm", px: 192, border: 6 },
+  { label: "96 × 96", meta: "9,216 studs · 76.8 cm", px: 300, border: 8 },
+];
+
+const Eyebrow = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-xs tracking-[.14em] uppercase font-semibold text-accent-ink">{children}</span>
+);
+
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="font-display font-normal text-[2.75rem] md:text-[4rem] leading-none tracking-[-0.025em]">
+    {children}
+  </h2>
+);
+
+function Arrow() {
   return (
-    <div
-      className="w-full aspect-square rounded-lg overflow-hidden"
-      style={{
-        display: "grid",
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gap: "2px",
-      }}
-    >
-      {colors.flat().map((color, i) => (
-        <div
-          key={i}
-          className="rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      ))}
-    </div>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const img = await getHomeImages();
+  const gallery = [1, 2, 3, 4].map((n) => img[`gallery_${n}`]);
+
   return (
     <main className="flex-1 flex flex-col">
       {/* ─── HERO ─── */}
-      <section className="min-h-screen flex items-center px-6 md:px-12 lg:px-20">
-        <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-12 md:gap-16 items-center">
-          <div className="order-2 md:order-1">
-            <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.05]">
-              Your photo.
-              <br />
-              <span className="text-accent">In bricks.</span>
-            </h1>
-            <p className="mt-6 text-muted text-lg md:text-xl max-w-md leading-relaxed">
-              Upload any image and get a real, buildable LEGO mosaic kit —
-              mixed brick sizes, numbered bags, and a step-by-step instruction
-              booklet.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Link
-                href="/create"
-                className="bg-accent hover:bg-accent-hover active:scale-[0.97] text-white font-bold text-lg px-8 py-4 rounded-xl transition-all"
-              >
-                Start building
-              </Link>
-              <button
-                onClick={() =>
-                  document
-                    .getElementById("how-it-works")
-                    ?.scrollIntoView({ behavior: "smooth" })
-                }
-                className="text-muted hover:text-text border border-border-custom px-8 py-4 rounded-xl transition-colors font-medium"
-              >
-                How it works
-              </button>
-            </div>
-          </div>
-          <div className="order-1 md:order-2 h-[400px] md:h-[560px] rounded-2xl overflow-hidden border border-border-custom">
-            <LegoScene />
+      <section className="px-5 md:px-16 pt-10 md:pt-[72px] pb-16 md:pb-24 grid lg:grid-cols-[5fr_7fr] gap-10 lg:gap-14 items-center">
+        <div className="flex flex-col gap-8 order-2 lg:order-1">
+          <span className="inline-flex self-start items-center gap-2 py-1.5 pl-1.5 pr-3 rounded-full bg-surface border border-line text-[13px] text-ink-2">
+            <span className="px-2 py-[3px] rounded-full bg-accent-soft text-accent-ink font-semibold text-xs">New</span>
+            Room previews for every mosaic
+          </span>
+          <h1 className="font-display font-normal text-[clamp(3.25rem,6.2vw,5.5rem)] leading-[.95] tracking-[-0.04em]">
+            Your photo.
+            <br />
+            <em className="text-accent">In bricks.</em>
+          </h1>
+          <p className="text-lg md:text-xl leading-relaxed text-ink-2 max-w-[460px] text-pretty">
+            Upload any image and get a real, buildable LEGO mosaic kit — mixed brick sizes,
+            numbered bags, and a step-by-step instruction booklet.
+          </p>
+          <div className="flex gap-3 flex-wrap">
+            <Link
+              href="/create"
+              className="h-14 px-7 rounded-full bg-accent hover:bg-accent-hover text-on-accent font-semibold inline-flex items-center gap-2.5 shadow-[0_8px_20px_-8px_rgba(194,64,30,.6)] hover:-translate-y-px transition-all"
+            >
+              Start building
+              <Arrow />
+            </Link>
+            <a
+              href="#how"
+              className="h-14 px-6 rounded-full border border-line-strong bg-surface hover:bg-surface-2 text-ink font-medium inline-flex items-center transition-colors"
+            >
+              How it works
+            </a>
           </div>
         </div>
+        <div className="order-1 lg:order-2">
+          <HeroScene />
+        </div>
+      </section>
+
+      {/* ─── BEFORE & AFTER ─── */}
+      <section className="px-5 md:px-16 pb-24 md:pb-[120px] grid lg:grid-cols-[5fr_7fr] gap-10 lg:gap-14 items-center">
+        <ScrollReveal className="flex flex-col gap-5">
+          <Eyebrow>Before &amp; after</Eyebrow>
+          <SectionTitle>From photo to brick masterpiece</SectionTitle>
+          <p className="text-lg leading-relaxed text-ink-2 max-w-[440px]">
+            See the magic of transformation from your photo to a LEGO® mosaic.
+          </p>
+        </ScrollReveal>
+        <ScrollReveal>
+          <CompareSlider
+            before={img.compare_before.src}
+            beforeAlt={img.compare_before.alt}
+            after={img.compare_after.src}
+            afterAlt={img.compare_after.alt}
+          />
+        </ScrollReveal>
       </section>
 
       {/* ─── HOW IT WORKS ─── */}
-      <section id="how-it-works" className="py-32 px-6 md:px-12">
-        <div className="max-w-5xl mx-auto">
-          <ScrollReveal>
-            <p className="text-accent font-semibold text-sm tracking-widest uppercase mb-3">
-              How it works
-            </p>
-            <h2 className="text-4xl md:text-5xl font-black tracking-tight">
-              Three steps to your kit
-            </h2>
-          </ScrollReveal>
-
-          <div className="mt-16 grid md:grid-cols-3 gap-10">
-            <ScrollReveal delay={0}>
-              <div className="group">
-                <div className="w-14 h-14 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xl font-black mb-5 group-hover:bg-accent group-hover:text-white transition-all duration-300">
-                  01
-                </div>
-                <h3 className="text-lg font-bold mb-2">Upload your photo</h3>
-                <p className="text-muted leading-relaxed text-sm">
-                  Drop in any JPEG or PNG — portraits, landscapes, pets, logos.
-                  We handle cropping and color mapping automatically.
-                </p>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={150}>
-              <div className="group">
-                <div className="w-14 h-14 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xl font-black mb-5 group-hover:bg-accent group-hover:text-white transition-all duration-300">
-                  02
-                </div>
-                <h3 className="text-lg font-bold mb-2">Pick your size</h3>
-                <p className="text-muted leading-relaxed text-sm">
-                  From 16&times;16 up to 96&times;96 studs. Our engine maps
-                  every pixel to one of 40+ real LEGO colors using perceptual
-                  color science.
-                </p>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={300}>
-              <div className="group">
-                <div className="w-14 h-14 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xl font-black mb-5 group-hover:bg-accent group-hover:text-white transition-all duration-300">
-                  03
-                </div>
-                <h3 className="text-lg font-bold mb-2">Get your LEGO kit</h3>
-                <p className="text-muted leading-relaxed text-sm">
-                  Numbered bags with mixed brick sizes and a full instruction
-                  booklet with color-coded step grids — just like an official
-                  LEGO set.
-                </p>
-              </div>
-            </ScrollReveal>
+      <section id="how" className="px-5 md:px-16 pb-24 md:pb-[120px] flex flex-col gap-12 scroll-mt-20">
+        <ScrollReveal className="flex flex-col md:flex-row md:justify-between md:items-end gap-6 md:gap-8 border-t border-line pt-12">
+          <div className="flex flex-col gap-4">
+            <Eyebrow>How it works</Eyebrow>
+            <SectionTitle>Three steps to the wall</SectionTitle>
           </div>
+          <Link
+            href="/create"
+            className="self-start h-12 px-[22px] rounded-full bg-ink text-bg font-semibold text-[15px] inline-flex items-center gap-2 hover:-translate-y-px transition-transform"
+          >
+            Start building
+          </Link>
+        </ScrollReveal>
+
+        <div className="grid md:grid-cols-3 gap-5">
+          <ScrollReveal delay={0} className="h-full">
+            <StepCard n="01" title="Upload a photo" body="Portraits, pets, logos, or landscapes all work. We center-crop it to your mosaic size.">
+              <div className="h-24 rounded-2xl border-[1.5px] border-dashed border-line-strong bg-bg grid place-items-center text-ink-2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12" />
+                  <path d="m17 8-5-5-5 5" />
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                </svg>
+              </div>
+            </StepCard>
+          </ScrollReveal>
+          <ScrollReveal delay={100} className="h-full">
+            <StepCard n="02" title="Pick a size" body="From 16 × 16 for a desk to 96 × 96 for a wall, with the price and real dimensions upfront.">
+              <div className="h-24 flex items-end gap-3">
+                <span className="w-7 h-7 rounded bg-surface-2 border border-line-strong" />
+                <span className="w-[52px] h-[52px] rounded-[5px] bg-surface-2 border border-line-strong" />
+                <span
+                  className="w-24 h-24 rounded-md shadow-md bg-cover bg-center"
+                  style={{ backgroundImage: `url(${img.sizes_art.src})` }}
+                />
+              </div>
+            </StepCard>
+          </ScrollReveal>
+          <ScrollReveal delay={200} className="h-full">
+            <StepCard n="03" title="Get your kit" body="Mixed brick sizes, numbered bags, a printed booklet and a downloadable PDF.">
+              <div className="h-24 flex items-end gap-2">
+                <span className="w-[68px] h-[92px] rounded-md bg-ink text-bg text-[10px] font-semibold p-2 flex items-end">Booklet</span>
+                {[1, 2, 3].map((n) => (
+                  <span key={n} className="w-10 h-[52px] rounded-lg bg-surface-2 border border-line-strong grid place-items-center text-xs font-bold">
+                    {n}
+                  </span>
+                ))}
+              </div>
+            </StepCard>
+          </ScrollReveal>
         </div>
       </section>
 
-      {/* ─── EXAMPLES GALLERY ─── */}
-      <section className="py-32 px-6 md:px-12 border-t border-border-custom">
-        <div className="max-w-5xl mx-auto">
-          <ScrollReveal>
-            <p className="text-highlight font-semibold text-sm tracking-widest uppercase mb-3">
-              Gallery
-            </p>
-            <h2 className="text-4xl md:text-5xl font-black tracking-tight">
-              Built with BrickArt
-            </h2>
-            <p className="text-muted mt-3 text-lg max-w-lg">
-              Every image becomes a unique mosaic. Here are some of our
-              favorites.
-            </p>
-          </ScrollReveal>
-
-          <div className="mt-16 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {EXAMPLES.map((ex, i) => (
-              <ScrollReveal key={ex.title} delay={i * 100}>
-                <div className="group bg-surface rounded-2xl border border-border-custom overflow-hidden hover:border-accent/30 transition-all duration-300">
-                  <div className="p-5">
-                    <MiniMosaic colors={ex.colors} />
-                  </div>
-                  <div className="px-5 pb-5">
-                    <h3 className="font-bold text-sm">{ex.title}</h3>
-                    <p className="text-muted text-xs mt-1">
-                      {ex.size} &middot; {ex.pieces} pieces
-                    </p>
-                  </div>
-                </div>
-              </ScrollReveal>
-            ))}
-          </div>
+      {/* ─── 3D PREVIEW / FEATURES ─── */}
+      <section id="features" className="mx-5 md:mx-16 mb-24 md:mb-[120px] rounded-[32px] bg-[#151413] text-[#F2EEE7] grid lg:grid-cols-[5fr_7fr] overflow-hidden min-h-[560px] scroll-mt-20">
+        <div className="p-8 md:p-16 flex flex-col gap-5 justify-center">
+          <span className="text-xs tracking-[.14em] uppercase font-semibold text-[#F08A66]">3D preview</span>
+          <h2 className="font-display font-normal text-[2.5rem] md:text-[3.5rem] leading-none tracking-[-0.025em]">
+            See your LEGO® mosaic come to life
+          </h2>
+          <p className="text-[17px] leading-relaxed text-[#A9A399] max-w-[400px]">
+            Explore your design in 3D and adjust the view from every angle.
+          </p>
+        </div>
+        <div className="relative min-h-[360px] [perspective:1400px] grid place-items-center overflow-hidden bg-[radial-gradient(circle_at_60%_40%,#2A2826,#151413_70%)]">
+          <img
+            src={img.preview_3d.src}
+            alt={img.preview_3d.alt}
+            className="w-[min(440px,70vw)] aspect-square [transform:rotateX(52deg)_rotateZ(-30deg)] shadow-[30px_60px_60px_rgba(0,0,0,.6)]"
+          />
+          <span className="absolute bottom-6 left-1/2 -translate-x-1/2 px-3.5 py-2 rounded-full bg-white/10 backdrop-blur-[10px] border border-white/10 text-[13px] whitespace-nowrap">
+            Real BrickLink colors · mixed brick sizes
+          </span>
         </div>
       </section>
 
-      {/* ─── FEATURES ─── */}
-      <section id="features" className="py-32 px-6 md:px-12 bg-surface border-t border-border-custom scroll-mt-20">
-        <div className="max-w-5xl mx-auto">
-          <ScrollReveal>
-            <p className="text-accent font-semibold text-sm tracking-widest uppercase mb-3">
-              Features
-            </p>
-            <h2 className="text-4xl md:text-5xl font-black tracking-tight">
-              Real engineering inside
-            </h2>
-          </ScrollReveal>
-
-          <div className="mt-16 grid md:grid-cols-2 gap-5">
-            <ScrollReveal delay={0}>
-              <div className="bg-bg rounded-2xl p-7 border border-border-custom hover:border-accent/20 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent font-bold text-lg mb-4">
-                  40+
+      {/* ─── GALLERY ─── */}
+      <section className="px-5 md:px-16 pb-24 md:pb-[120px] flex flex-col gap-12">
+        <ScrollReveal className="flex flex-col gap-4 border-t border-line pt-12">
+          <Eyebrow>Gallery</Eyebrow>
+          <SectionTitle>Built with BrickArt</SectionTitle>
+          <p className="text-lg leading-relaxed text-ink-2">
+            Every image becomes a unique mosaic. Here are some of our favorites.
+          </p>
+        </ScrollReveal>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+          {gallery.map((g, i) => (
+            <ScrollReveal key={i} delay={i * 80}>
+              <div className="rounded-3xl bg-surface border border-line p-3 flex flex-col gap-3.5 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
+                <img src={g.src} alt={g.alt} className="w-full aspect-square object-cover rounded-[14px] block" />
+                <div className="px-2 pb-2 flex flex-col gap-0.5">
+                  <span className="text-base font-semibold">{g.title}</span>
+                  <span className="text-[13px] text-ink-2">{g.meta}</span>
                 </div>
-                <h3 className="font-bold mb-2">Authentic LEGO colors</h3>
-                <p className="text-muted text-sm leading-relaxed">
-                  Real BrickLink color palette with Delta E 2000 perceptual
-                  matching. Every pixel maps to a color you can actually
-                  source.
-                </p>
               </div>
             </ScrollReveal>
-
-            <ScrollReveal delay={100}>
-              <div className="bg-bg rounded-2xl p-7 border border-border-custom hover:border-accent/20 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-highlight/10 flex items-center justify-center text-highlight font-bold text-lg mb-4">
-                  14
-                </div>
-                <h3 className="font-bold mb-2">Mixed brick types</h3>
-                <p className="text-muted text-sm leading-relaxed">
-                  Not just 1&times;1 studs. Tiles, plates, and rounds from
-                  1&times;1 to 2&times;4 — randomized and fitted like a real
-                  set.
-                </p>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={200}>
-              <div className="bg-bg rounded-2xl p-7 border border-border-custom hover:border-accent/20 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent mb-4">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                    />
-                  </svg>
-                </div>
-                <h3 className="font-bold mb-2">Numbered bags</h3>
-                <p className="text-muted text-sm leading-relaxed">
-                  Parts organized into bags by grid section. Open one bag at a
-                  time and build section by section, just like the real thing.
-                </p>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={300}>
-              <div className="bg-bg rounded-2xl p-7 border border-border-custom hover:border-accent/20 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-highlight/10 flex items-center justify-center text-highlight mb-4">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                    />
-                  </svg>
-                </div>
-                <h3 className="font-bold mb-2">Instruction booklet</h3>
-                <p className="text-muted text-sm leading-relaxed">
-                  Auto-generated PDF with cover, per-bag parts lists,
-                  color-coded grids with accessibility symbols, and a finished
-                  reference.
-                </p>
-              </div>
-            </ScrollReveal>
-          </div>
+          ))}
         </div>
       </section>
 
       {/* ─── SIZES ─── */}
-      <section className="py-32 px-6 md:px-12 border-t border-border-custom">
-        <div className="max-w-5xl mx-auto">
-          <ScrollReveal>
-            <p className="text-highlight font-semibold text-sm tracking-widest uppercase mb-3">
-              Sizes
-            </p>
-            <h2 className="text-4xl md:text-5xl font-black tracking-tight">
-              From desk to wall
-            </h2>
-          </ScrollReveal>
-
-          <div className="mt-16 flex items-end justify-center gap-8 md:gap-14">
-            <ScrollReveal delay={0}>
-              <div className="flex flex-col items-center">
-                <div className="w-14 h-14 md:w-16 md:h-16 rounded-lg border border-border-custom grid grid-cols-3 grid-rows-3 gap-[2px] p-1.5">
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <div key={i} className="bg-accent rounded-full" />
-                  ))}
-                </div>
-                <span className="text-sm font-bold mt-3">16&times;16</span>
-                <span className="text-xs text-muted">256 studs</span>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={150}>
-              <div className="flex flex-col items-center">
-                <div className="w-24 h-24 md:w-28 md:h-28 rounded-lg border border-border-custom grid grid-cols-5 grid-rows-5 gap-[2px] p-2">
-                  {Array.from({ length: 25 }).map((_, i) => (
-                    <div key={i} className="bg-highlight rounded-full" />
-                  ))}
-                </div>
-                <span className="text-sm font-bold mt-3">48&times;48</span>
-                <span className="text-xs text-muted">2,304 studs</span>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={300}>
-              <div className="flex flex-col items-center">
-                <div className="w-36 h-36 md:w-44 md:h-44 rounded-lg border border-border-custom grid grid-cols-7 grid-rows-7 gap-[2px] p-2.5">
-                  {Array.from({ length: 49 }).map((_, i) => (
-                    <div key={i} className="bg-accent rounded-full" />
-                  ))}
-                </div>
-                <span className="text-sm font-bold mt-3">96&times;96</span>
-                <span className="text-xs text-muted">9,216 studs</span>
-              </div>
-            </ScrollReveal>
-          </div>
+      <section className="px-5 md:px-16 pb-24 md:pb-[120px] flex flex-col gap-12">
+        <ScrollReveal className="flex flex-col gap-4 border-t border-line pt-12">
+          <Eyebrow>Sizes</Eyebrow>
+          <SectionTitle>From desk to wall</SectionTitle>
+        </ScrollReveal>
+        <div className="relative rounded-[32px] bg-gradient-to-b from-[#E6E2DB] to-[#D9D5CE] overflow-hidden flex items-end justify-center gap-6 md:gap-[72px] pt-16 pb-24 md:pb-[120px] text-[#1B1916]">
+          <div className="absolute inset-x-0 bottom-0 h-16 md:h-24 bg-[#C8C3BB] border-t border-[#B9B4AC]" />
+          {SIZES.map((s) => (
+            <div key={s.label} className="relative flex flex-col items-center gap-3.5">
+              <img
+                src={img.sizes_art.src}
+                alt={`${img.sizes_art.alt} at ${s.label}`}
+                className="shadow-art border-[#1B1916] max-w-[26vw] h-auto"
+                style={{ width: s.px, height: s.px, borderWidth: s.border, borderStyle: "solid" }}
+              />
+              <span className="text-center text-sm font-semibold">
+                {s.label}
+                <br />
+                <span className="font-normal text-[#5C564E] text-[13px]">{s.meta}</span>
+              </span>
+            </div>
+          ))}
         </div>
+      </section>
+
+      {/* ─── QUOTES ─── */}
+      <section className="px-5 md:px-16 pb-24 md:pb-[120px] grid md:grid-cols-3 gap-5">
+        {QUOTES.map((q, i) => (
+          <ScrollReveal key={q.name} delay={i * 100} className="h-full">
+            <figure className="m-0 h-full rounded-3xl bg-surface border border-line p-8 flex flex-col gap-6">
+              <blockquote className="m-0 font-display text-[1.75rem] leading-[1.2] tracking-[-0.01em]">
+                “{q.text}”
+              </blockquote>
+              <figcaption className="flex items-center gap-3 mt-auto">
+                <span aria-hidden className="w-10 h-10 rounded-[10px] bg-accent-soft text-accent-ink grid place-items-center text-sm font-semibold">{q.name[0]}</span>
+                <span className="flex flex-col">
+                  <span className="text-sm font-semibold">{q.name}</span>
+                  <span className="text-[13px] text-ink-2">{q.meta}</span>
+                </span>
+              </figcaption>
+            </figure>
+          </ScrollReveal>
+        ))}
       </section>
 
       {/* ─── CTA ─── */}
-      <section className="py-32 px-6 bg-accent">
-        <div className="max-w-2xl mx-auto text-center">
-          <ScrollReveal>
-            <h2 className="text-4xl md:text-6xl font-black tracking-tight text-white">
-              Ready to build?
-            </h2>
-            <p className="mt-4 text-white/70 text-lg">
-              Turn your favorite photo into a LEGO masterpiece.
-            </p>
-            <Link
-              href="/create"
-              className="inline-block mt-8 bg-white text-accent hover:bg-text active:scale-[0.97] font-bold text-lg px-10 py-4 rounded-xl transition-all"
-            >
-              Create your mosaic
-            </Link>
-          </ScrollReveal>
-        </div>
+      <section className="mx-5 md:mx-16 mb-16 md:mb-24 rounded-[32px] bg-ink text-bg px-8 py-14 md:px-16 md:py-20 flex flex-col md:flex-row md:justify-between md:items-end gap-8 md:gap-12">
+        <h2 className="font-display font-normal text-[2.75rem] md:text-[4.25rem] leading-[.98] tracking-[-0.035em] max-w-[820px]">
+          Turn your favorite photo into <em>wall art.</em>
+        </h2>
+        <Link
+          href="/create"
+          className="self-start md:self-auto h-14 px-7 rounded-full bg-accent hover:bg-accent-hover text-on-accent font-semibold inline-flex items-center gap-2.5 shrink-0 transition-colors"
+        >
+          Start building
+          <Arrow />
+        </Link>
       </section>
-
-      {/* ─── FOOTER ─── */}
-      <footer className="py-8 px-6 border-t border-border-custom text-center text-muted text-sm">
-        BrickArt — Photo to LEGO Mosaic Generator
-      </footer>
     </main>
+  );
+}
+
+function StepCard({
+  n,
+  title,
+  body,
+  children,
+}: {
+  n: string;
+  title: string;
+  body: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="h-full min-h-[280px] rounded-3xl bg-surface border border-line p-8 flex flex-col gap-5 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
+      <span className="font-display text-[3.5rem] leading-none text-accent">{n}</span>
+      {children}
+      <div className="flex flex-col gap-1.5 mt-auto">
+        <span className="text-xl font-semibold">{title}</span>
+        <span className="text-[15px] leading-relaxed text-ink-2">{body}</span>
+      </div>
+    </div>
   );
 }

@@ -1,20 +1,10 @@
 "use client";
 
-// A LEGO stud pitch is 8 mm, so a mosaic's real-world size is studs × 0.8 cm.
-export const STUD_CM = 0.8;
-export const MIN_STUDS = 16;
-export const MAX_STUDS = 96;
+import { STUD_CM, MIN_STUDS, MAX_STUDS, clampStuds, sizeCm } from "@/lib/studs";
 
-export const clampStuds = (n: number, min = MIN_STUDS, max = MAX_STUDS) =>
-  Math.max(min, Math.min(max, Math.round(n) || min));
-
-const cm = (studs: number) => {
-  const v = studs * STUD_CM;
-  return Number.isInteger(v) ? `${v}` : v.toFixed(1);
-};
-
-export const sizeCm = (w: number, h: number) =>
-  w === h ? `${cm(w)} cm` : `${cm(w)}×${cm(h)} cm`;
+// Re-exported so existing imports from this module keep working; the helpers
+// live in lib/studs so server components can use them too.
+export { STUD_CM, MIN_STUDS, MAX_STUDS, clampStuds, sizeCm };
 
 /** A size option coming from the database. */
 export interface SizeOption {
@@ -22,6 +12,8 @@ export interface SizeOption {
   height: number;
   label: string | null;
   enabled: boolean;
+  /** Admin-entered customer-facing price, e.g. "140TND". Empty until set. */
+  displayPrice: string;
 }
 
 interface Props {
@@ -35,6 +27,9 @@ interface Props {
   onChange: (w: number, h: number) => void;
 }
 
+const numberInput =
+  "block w-24 mt-1 h-11 px-3 bg-surface border border-line-strong rounded-xl text-sm text-ink focus:outline-none focus:border-accent";
+
 export default function SizeSelector({
   sizes,
   width,
@@ -46,14 +41,15 @@ export default function SizeSelector({
 }: Props) {
   return (
     <div>
-      <label className="block text-sm font-medium text-text mb-2">
+      <div id="size-label" className="text-sm font-semibold text-ink mb-3">
         Mosaic size (studs)
-      </label>
+      </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+      <div aria-labelledby="size-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
         {sizes.map((p) => {
           const active = width === p.width && height === p.height;
-          const base = "rounded-lg border px-2 py-2 text-center transition-colors";
+          const base =
+            "min-h-[84px] w-full rounded-[18px] px-4 py-3.5 text-left flex flex-col gap-1 transition-all duration-200";
 
           if (!p.enabled) {
             // Disabled → greyed, not selectable, "Coming soon" tooltip on hover.
@@ -63,18 +59,16 @@ export default function SizeSelector({
                   type="button"
                   disabled
                   aria-disabled="true"
-                  className={`${base} w-full cursor-not-allowed border-border-custom opacity-45`}
+                  className={`${base} cursor-not-allowed bg-surface shadow-[inset_0_0_0_1px_var(--line-strong)] opacity-45`}
                 >
-                  <span className="block text-sm font-semibold">
+                  <span className="text-[17px] font-semibold">
                     {p.width} × {p.height}
                   </span>
-                  <span className="block text-xs text-muted">
-                    {sizeCm(p.width, p.height)}
-                  </span>
+                  <span className="text-[13px] opacity-75">{sizeCm(p.width, p.height)}</span>
                 </button>
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border-custom bg-surface px-2 py-1 text-xs text-text opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                  className="pointer-events-none absolute -top-9 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-ink opacity-0 shadow-md transition-opacity group-hover:opacity-100"
                 >
                   Coming soon
                 </span>
@@ -86,57 +80,57 @@ export default function SizeSelector({
             <button
               key={`${p.width}x${p.height}`}
               type="button"
+              aria-pressed={active}
               onClick={() => onChange(p.width, p.height)}
-              className={`${base} ${
+              className={`${base} hover:-translate-y-0.5 active:scale-[.98] ${
                 active
-                  ? "bg-accent text-white border-accent"
-                  : "border-border-custom text-muted hover:border-accent/40 hover:text-text"
+                  ? "bg-ink text-bg shadow-[inset_0_0_0_1px_var(--ink)]"
+                  : "bg-surface text-ink shadow-[inset_0_0_0_1px_var(--line-strong)]"
               }`}
             >
-              <span className="block text-sm font-semibold">
+              <span className="text-[17px] font-semibold">
                 {p.width} × {p.height}
               </span>
-              <span
-                className={`block text-xs ${active ? "text-white/80" : "text-muted"}`}
-              >
-                {sizeCm(p.width, p.height)}
-              </span>
+              <span className="text-[13px] opacity-75">{sizeCm(p.width, p.height)}</span>
+              {p.displayPrice && (
+                <span className="text-[13px] font-semibold mt-0.5">{p.displayPrice}</span>
+              )}
             </button>
           );
         })}
       </div>
 
       {customSizeEnabled && (
-        <div className="flex items-center gap-3">
-          <div>
-            <label className="text-xs text-muted">Width</label>
+        <div className="flex items-end gap-3">
+          <label className="text-xs text-ink-2">
+            Width
             <input
               type="number"
               min={minStud}
               max={maxStud}
               value={width}
               onChange={(e) => onChange(clampStuds(Number(e.target.value), minStud, maxStud), height)}
-              className="block w-20 mt-0.5 px-2 py-1.5 bg-surface border border-border-custom rounded-lg text-sm text-text"
+              className={numberInput}
             />
-          </div>
-          <span className="mt-4 text-muted">x</span>
-          <div>
-            <label className="text-xs text-muted">Height</label>
+          </label>
+          <span className="pb-3 text-ink-2">×</span>
+          <label className="text-xs text-ink-2">
+            Height
             <input
               type="number"
               min={minStud}
               max={maxStud}
               value={height}
               onChange={(e) => onChange(width, clampStuds(Number(e.target.value), minStud, maxStud))}
-              className="block w-20 mt-0.5 px-2 py-1.5 bg-surface border border-border-custom rounded-lg text-sm text-text"
+              className={numberInput}
             />
-          </div>
+          </label>
         </div>
       )}
 
-      <p className="mt-3 text-xs text-muted">
-        About {sizeCm(width, height)} of finished bricks — or drag the preview
-        corners to {customSizeEnabled ? "resize" : "snap between sizes"}.
+      <p className="mt-4 text-[13px] text-ink-2">
+        About {sizeCm(width, height)} of finished bricks — or drag the crop corners to{" "}
+        {customSizeEnabled ? "resize" : "snap between sizes"}.
       </p>
     </div>
   );
