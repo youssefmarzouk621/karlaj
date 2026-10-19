@@ -1,0 +1,13 @@
+# Production env files — templates are the *.example files
+/.env
+/.env-frontend
+/.env-dashboard
+/.env-mosaic
+/traefik/.env
+/traefik/letsencrypt/
+
+# Snapshot of local dev data (infra/scripts/export-local-data.sh): real data,
+# password hashes — copied to the server with rsync, never committed
+/infra/docker/mysql-init/data/
+/infra/docker/realm-config/*.json
+/infra/docker/data-export/

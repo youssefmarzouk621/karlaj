@@ -1,0 +1,13 @@
+venv
+.venv
+__pycache__
+*.py[cod]
+.env
+.env.*
+.DS_Store
+*.md
+test_images
+tests_result
+optimization
+results
+*.pdf

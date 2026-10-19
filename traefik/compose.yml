@@ -1,0 +1,73 @@
+# Traefik reverse proxy — its own stack, in /opt/traefik on the server.
+# Start it once, before any app:
+#   docker network create traefik
+#   docker compose up -d
+#
+# Apps join the external `traefik` network and opt in with `traefik.enable=true`
+# labels. TLS: one Let's Encrypt wildcard certificate (DOMAIN + *.DOMAIN) issued
+# through the Cloudflare DNS challenge, so nothing has to be reachable on :80
+# for issuance. The dashboard ("portal") is at https://traefik.${DOMAIN}.
+
+name: traefik
+
+services:
+  traefik:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --ping=true
+      - --api.dashboard=true
+
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=traefik
+
+      # :80 only redirects to https
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.certresolver=cloudflare
+      - --entrypoints.websecure.http.tls.domains[0].main=${DOMAIN:?set in .env}
+      - --entrypoints.websecure.http.tls.domains[0].sans=*.${DOMAIN}
+
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL:-${CF_API_EMAIL}}
+      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+    environment:
+      # Cloudflare credentials for the DNS challenge (global API key + account email)
+      CF_API_EMAIL: ${CF_API_EMAIL:?set in .env}
+      CF_API_KEY: ${CF_API_KEY:?set in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.traefik-dashboard.rule: Host(`traefik.${DOMAIN}`)
+      traefik.http.routers.traefik-dashboard.entrypoints: websecure
+      traefik.http.routers.traefik-dashboard.service: api@internal
+      traefik.http.routers.traefik-dashboard.middlewares: traefik-dashboard-auth
+      traefik.http.middlewares.traefik-dashboard-auth.basicauth.users: ${TRAEFIK_DASHBOARD_USERS:?set in .env}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  traefik:
+    external: true

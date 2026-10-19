@@ -1,0 +1,36 @@
+# Build context for frontend/ and dashboard/ is the repo root (they both need
+# the shared database/ package). Keep it small: only sources reach the daemon.
+
+**/node_modules
+**/.next
+**/dist
+**/venv
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.DS_Store
+**/test-results
+**/playwright-report
+**/blob-report
+**/tsconfig.tsbuildinfo
+**/e2e
+
+# Local secrets — production env comes from the .env-* files at runtime
+**/.env
+**/.env.*
+.env-*
+
+# Not part of any image
+.git
+.claude
+legacy
+orders
+sample-images
+docs
+traefik
+infra
+frontend/public/uploads
+mosaic-generator/test_images
+mosaic-generator/tests_result
+mosaic-generator/optimization
+infra/docker/data

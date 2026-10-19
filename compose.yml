@@ -1,0 +1,207 @@
+# BrickArt production stack. Lives in /opt/app on the server (see DEPLOY.md).
+#
+#   https://${DOMAIN}            → frontend (storefront)
+#   https://dashboard.${DOMAIN}  → dashboard (admin)
+#   https://auth.${DOMAIN}       → keycloak
+#   mosaic-generator, mysql      → internal only
+#
+# Requires the external `traefik` network and the Traefik stack in /opt/traefik.
+# Variables: .env (global — DOMAIN, DB credentials, API keys) is read by Compose
+# itself; .env-frontend / .env-dashboard / .env-mosaic are per-service and may
+# reference anything in .env as ${VAR}.
+
+name: brickart
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-traefik-https: &traefik-https
+  traefik.enable: "true"
+  traefik.docker.network: traefik
+
+services:
+  # -------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    # Skip reverse-DNS on client connections (instant TCP handshakes)
+    command: ["--skip-name-resolve"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?set in .env}
+      MYSQL_USER: ${MYSQL_USER:?set in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set in .env}
+      # read by infra/docker/mysql-init/*.sh on first start
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set in .env}
+      ASSETS_BASE_URL: https://${DOMAIN}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./infra/docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP on purpose: during first-start init MySQL listens on the socket only
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [internal]
+    <<: *logging
+
+  # -------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2.3
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql:3306/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set in .env}
+      KC_HOSTNAME: https://auth.${DOMAIN}
+      KC_HTTP_ENABLED: "true" # TLS ends at Traefik
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: scripts
+      # resolved as ${...} placeholders in realm-config/*.json on import
+      DOMAIN: ${DOMAIN}
+      KEYCLOAK_FRONTEND_CLIENT_SECRET: ${KEYCLOAK_FRONTEND_CLIENT_SECRET:?set in .env}
+      KEYCLOAK_DASHBOARD_CLIENT_SECRET: ${KEYCLOAK_DASHBOARD_CLIENT_SECRET:?set in .env}
+    volumes:
+      - ./infra/docker/realm-config:/opt/keycloak/data/import:ro
+      - ./infra/docker/themes:/opt/keycloak/themes:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      # the image has no curl/wget — ask the management port over bash /dev/tcp
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q 'UP' <&3
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks: [internal, traefik]
+    labels:
+      <<: *traefik-https
+      traefik.http.routers.brickart-auth.rule: Host(`auth.${DOMAIN}`)
+      traefik.http.routers.brickart-auth.entrypoints: websecure
+      traefik.http.routers.brickart-auth.tls.certresolver: cloudflare
+      traefik.http.services.brickart-auth.loadbalancer.server.port: "8080"
+    <<: *logging
+
+  # -------------------------------------------------------------------------
+  mosaic-generator:
+    build:
+      context: ./mosaic-generator
+    image: brickart/mosaic-generator:latest
+    restart: unless-stopped
+    env_file: [.env-mosaic]
+    networks: [internal]
+    <<: *logging
+
+  # -------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: brickart/frontend:latest
+    restart: unless-stopped
+    env_file: [.env-frontend]
+    volumes:
+      # rendered artwork images (frontend/src/lib/server/artworkImages.ts)
+      - uploads:/app/frontend/public/uploads
+    extra_hosts:
+      # server-side calls to Keycloak go straight to Traefik on this host
+      - auth.${DOMAIN}:host-gateway
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mosaic-generator:
+        condition: service_started
+      # the dashboard owns schema changes — wait for its migrations
+      dashboard:
+        condition: service_healthy
+    networks: [internal, traefik]
+    labels:
+      <<: *traefik-https
+      traefik.http.routers.brickart-frontend.rule: Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+      traefik.http.routers.brickart-frontend.entrypoints: websecure
+      traefik.http.routers.brickart-frontend.tls.certresolver: cloudflare
+      traefik.http.routers.brickart-frontend.middlewares: brickart-www-redirect
+      traefik.http.middlewares.brickart-www-redirect.redirectregex.regex: ^https://www\.(.*)
+      traefik.http.middlewares.brickart-www-redirect.redirectregex.replacement: https://$${1}
+      traefik.http.middlewares.brickart-www-redirect.redirectregex.permanent: "true"
+      traefik.http.services.brickart-frontend.loadbalancer.server.port: "3000"
+    <<: *logging
+
+  # -------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    image: brickart/dashboard:latest
+    restart: unless-stopped
+    env_file: [.env-dashboard]
+    extra_hosts:
+      - auth.${DOMAIN}:host-gateway
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [internal, traefik]
+    labels:
+      <<: *traefik-https
+      traefik.http.routers.brickart-dashboard.rule: Host(`dashboard.${DOMAIN}`)
+      traefik.http.routers.brickart-dashboard.entrypoints: websecure
+      traefik.http.routers.brickart-dashboard.tls.certresolver: cloudflare
+      traefik.http.services.brickart-dashboard.loadbalancer.server.port: "3002"
+    <<: *logging
+
+  # -------------------------------------------------------------------------
+  # One-off jobs against the shared database (not started by `up`):
+  #   docker compose run --rm dbtools npm run db:seed
+  dbtools:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+      target: dbtools
+    image: brickart/dbtools:latest
+    profiles: [tools]
+    env_file: [.env-dashboard]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [internal]
+
+  # phpMyAdmin, local-only: `docker compose --profile tools up -d pma`, then
+  # `ssh -L 8080:127.0.0.1:8080 <server>` and open http://localhost:8080
+  pma:
+    image: phpmyadmin:5
+    profiles: [tools]
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [internal]
+
+volumes:
+  mysql-data:
+  uploads:
+
+networks:
+  internal:
+  traefik:
+    external: true
