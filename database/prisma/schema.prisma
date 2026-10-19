@@ -177,11 +177,20 @@ model Color {
 
 /// What a Part is: a BRICK is tiled into the mosaic by the generator; a BASE is
 /// the plate the mosaic is built on (e.g. the 16x16 Technic plate 65803 whose
-/// side holes let several bases pin together). Bases are never placed by the
-/// generator.
+/// side holes let several bases pin together); a CONNECTOR joins neighbouring
+/// bases through those holes (e.g. the Technic pin 3673). Bases and connectors
+/// are never placed by the generator.
 enum PartKind {
   BRICK
   BASE
+  CONNECTOR
+}
+
+/// The plate's footprint as seen from the front. ROUND (e.g. 4073) leaves the
+/// base showing between pieces, which every preview has to draw.
+enum PartShape {
+  SQUARE
+  ROUND
 }
 
 /// A brick/plate the generator may use, or a base (see PartKind). `variable` on the 1x1 part is the max
@@ -191,18 +200,19 @@ enum PartKind {
 /// `partId`, not on the footprint: two parts can share a size (e.g. the 1x1
 /// square plate 3024 and the 1x1 round plate 4073).
 model Part {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  partId      String   @unique @map("part_id") @db.VarChar(50)
-  kind        PartKind @default(BRICK)
+  id          String    @id @default(uuid())
+  name        String    @db.VarChar(100)
+  partId      String    @unique @map("part_id") @db.VarChar(50)
+  kind        PartKind  @default(BRICK)
+  shape       PartShape @default(SQUARE)
   width       Int
   height      Int
-  enabled     Boolean  @default(true)
+  enabled     Boolean   @default(true)
   variable    Float?
-  weightGrams Float?   @map("weight_grams")
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  weightGrams Float?    @map("weight_grams")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   inventory InventoryItem[]
 

@@ -8,6 +8,8 @@ export interface Placement {
   col: number;
   brick_width: number;
   brick_height: number;
+  /** "round" for round plates (e.g. 4073); absent on artworks saved before shapes. */
+  shape?: "round" | "square";
 }
 
 export interface Part {

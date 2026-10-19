@@ -1,6 +1,7 @@
 "use client";
 
 import { STUD_CM, MIN_STUDS, MAX_STUDS, clampStuds, sizeCm } from "@/lib/studs";
+import { FULL_PHOTO_CROP, cropFraction, orientationOf } from "@/lib/crop";
 
 // Re-exported so existing imports from this module keep working; the helpers
 // live in lib/studs so server components can use them too.
@@ -24,6 +25,8 @@ interface Props {
   maxStud: number;
   /** When false, hide the free width/height inputs — only the presets remain. */
   customSizeEnabled: boolean;
+  /** The photo's width / height, once known: filters sizes to its orientation and shows crop badges. */
+  photoAspect?: number | null;
   onChange: (w: number, h: number) => void;
 }
 
@@ -37,16 +40,12 @@ export default function SizeSelector({
   minStud,
   maxStud,
   customSizeEnabled,
+  photoAspect,
   onChange,
 }: Props) {
-  return (
-    <div>
-      <div id="size-label" className="text-sm font-semibold text-ink mb-3">
-        Mosaic size (studs)
-      </div>
+  const { recommended, other } = splitSizesForPhoto(sizes, photoAspect);
 
-      <div aria-labelledby="size-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
-        {sizes.map((p) => {
+  const renderCard = (p: SizeOption) => {
           const active = width === p.width && height === p.height;
           const base =
             "min-h-[84px] w-full rounded-[18px] px-4 py-3.5 text-left flex flex-col gap-1 transition-all duration-200";
@@ -95,10 +94,42 @@ export default function SizeSelector({
               {p.displayPrice && (
                 <span className="text-[13px] font-semibold mt-0.5">{p.displayPrice}</span>
               )}
+              {photoAspect && <CropBadge crop={cropFraction(photoAspect, p.width / p.height)} />}
             </button>
           );
-        })}
+  };
+
+  const grid = "grid grid-cols-2 sm:grid-cols-3 gap-2.5";
+
+  return (
+    <div>
+      <div id="size-label" className="text-sm font-semibold text-ink mb-3">
+        Mosaic size (studs)
       </div>
+
+      {recommended.length > 0 ? (
+        // Every size stays available; the ones shaped like the photo come first.
+        <div className="flex flex-col gap-4 mb-5">
+          <div role="group" aria-labelledby="sizes-recommended-label">
+            <div id="sizes-recommended-label" className="text-[13px] font-semibold text-ink-2 mb-2">
+              Recommended for your photo
+            </div>
+            <div className={grid}>{recommended.map(renderCard)}</div>
+          </div>
+          {other.length > 0 && (
+            <div role="group" aria-labelledby="sizes-other-label">
+              <div id="sizes-other-label" className="text-[13px] font-semibold text-ink-2 mb-2">
+                Other sizes
+              </div>
+              <div className={grid}>{other.map(renderCard)}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div aria-labelledby="size-label" className={`${grid} mb-5`}>
+          {other.map(renderCard)}
+        </div>
+      )}
 
       {customSizeEnabled && (
         <div className="flex items-end gap-3">
@@ -133,5 +164,46 @@ export default function SizeSelector({
         {customSizeEnabled ? "resize" : "snap between sizes"}.
       </p>
     </div>
+  );
+}
+
+/**
+ * Splits the sizes for a photo: `recommended` are those shaped like it (same
+ * orientation — portrait / landscape / square), `other` is everything else.
+ * Nothing is hidden: a customer may still want a size that crops more. With
+ * no photo yet, or no enabled size of its shape, everything is in `other`.
+ */
+export function splitSizesForPhoto(
+  sizes: SizeOption[],
+  photoAspect?: number | null
+): { recommended: SizeOption[]; other: SizeOption[] } {
+  if (!photoAspect) return { recommended: [], other: sizes };
+  const want = orientationOf(photoAspect, 1);
+  const matches = (s: SizeOption) => orientationOf(s.width, s.height) === want;
+  const recommended = sizes.filter(matches);
+  if (!recommended.some((s) => s.enabled)) return { recommended: [], other: sizes };
+  return { recommended, other: sizes.filter((s) => !matches(s)) };
+}
+
+/** The enabled size that crops the least of the photo, preferring recommended ones. */
+export function bestFitSize(sizes: SizeOption[], photoAspect: number): SizeOption | undefined {
+  const { recommended, other } = splitSizesForPhoto(sizes, photoAspect);
+  return (recommended.length ? recommended : other)
+    .filter((s) => s.enabled)
+    .reduce<SizeOption | undefined>(
+      (best, s) =>
+        !best || cropFraction(photoAspect, s.width / s.height) < cropFraction(photoAspect, best.width / best.height)
+          ? s
+          : best,
+      undefined
+    );
+}
+
+function CropBadge({ crop }: { crop: number }) {
+  const full = crop < FULL_PHOTO_CROP;
+  return (
+    <span data-testid="crop-badge" className="text-[12px] opacity-75">
+      {full ? "Full photo" : `Crops ${Math.round(crop * 100)}%`}
+    </span>
   );
 }

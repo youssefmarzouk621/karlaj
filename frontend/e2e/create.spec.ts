@@ -98,3 +98,76 @@ test("a failed generation shows a meaningful message, not a status code", async 
   await page.getByRole("button", { name: "Generate mosaic" }).click();
   await expect(page.getByText("couldn't reach the server")).toBeVisible();
 });
+
+test("the size step recommends sizes matching the photo's shape and keeps the rest", async ({ page }) => {
+  await page.goto("/create");
+
+  // Portrait photo (672×1000): portrait sizes are recommended, the least-
+  // cropping one (80×128 crops ~7%) preselected; every size shows its crop.
+  await page.setInputFiles('input[type="file"]', join(IMAGES, "21.jpg"));
+  await expect(page.getByText("Photo ready")).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Pick your size" })).toBeVisible();
+  const recommended = page.getByRole("group", { name: "Recommended for your photo" });
+  const other = page.getByRole("group", { name: "Other sizes" });
+  const tall = recommended.getByRole("button", { name: /80 × 128/ });
+  await expect(tall).toHaveAttribute("aria-pressed", "true");
+  await expect(tall.getByTestId("crop-badge")).toHaveText("Crops 7%");
+  await expect(recommended.getByRole("button", { name: /48 × 96/ }).getByTestId("crop-badge")).toHaveText(
+    "Crops 26%",
+  );
+  // Square sizes aren't hidden — they're under "Other sizes", still selectable.
+  const square48 = other.getByRole("button", { name: /48 × 48/ });
+  await expect(square48.getByTestId("crop-badge")).toHaveText("Crops 33%");
+  await square48.click();
+  await expect(square48).toHaveAttribute("aria-pressed", "true");
+
+  // Square photo: square sizes recommended (using the whole photo), the
+  // portrait ones moved to "Other sizes".
+  await page.getByRole("button", { name: "Back" }).click();
+  await page.setInputFiles('input[type="file"]', join(IMAGES, "album drake.jpeg"));
+  await expect(page.getByText("album drake.jpeg")).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(recommended.getByRole("button", { name: /48 × 48/ }).getByTestId("crop-badge")).toHaveText(
+    "Full photo",
+  );
+  await expect(other.getByRole("button", { name: /80 × 128/ })).toBeVisible();
+  await expect(recommended.getByRole("button", { name: /80 × 128/ })).toHaveCount(0);
+});
+
+test("dragging the photo in the crop preview sets the crop sent to the generator", async ({ page }) => {
+  const sent: Record<string, string>[] = [];
+  await page.route("**/api/convert", async (route) => {
+    const body = route.request().postDataBuffer()?.toString("latin1") ?? "";
+    const field = (name: string) => body.match(new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)`))?.[1] ?? "";
+    sent.push({ crop_x: field("crop_x"), crop_y: field("crop_y") });
+    await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "stop here" }) });
+  });
+
+  await page.goto("/create");
+  // The GTA cover (0.90) is wider than 80×128 (0.625): the crop slides sideways.
+  await page.setInputFiles('input[type="file"]', join(IMAGES, "gta6.jpg"));
+  await expect(page.getByText("Photo ready")).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: /80 × 128/ }).first().click();
+
+  // Untouched: centered.
+  await page.getByRole("button", { name: "Generate mosaic" }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toEqual({ crop_x: "0.5", crop_y: "0.5" });
+
+  // Drag the photo to the right: the window moves toward the photo's left edge.
+  const box = await page.getByTestId("crop-box").boundingBox();
+  if (!box) throw new Error("crop box not rendered");
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 40, cy, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole("button", { name: "Generate mosaic" }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(Number(sent[1].crop_x)).toBeLessThan(0.5);
+  expect(sent[1].crop_y).toBe("0.5");
+});

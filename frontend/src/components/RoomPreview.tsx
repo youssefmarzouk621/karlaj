@@ -4,20 +4,23 @@ import { useEffect, useState } from "react";
 import { RoomScene } from "@/components/RoomMockups";
 import { getFrameMockups } from "@/lib/frameMockups";
 import { sizeCm } from "@/lib/studs";
+import { cropRect, type CropPosition } from "@/lib/crop";
 
 interface Props {
   /** The customer's photo (object URL). */
   preview: string | null;
   width: number;
   height: number;
+  /** Where the crop window sits on the photo (as chosen in the crop preview). */
+  crop: CropPosition;
 }
 
 /**
- * The customer's photo center-cropped to the chosen size and placed in the first
+ * The customer's photo cropped to the chosen size and placed in the first
  * "in your space" scene, so they can picture the finished piece before
  * generating. Uses a real photo mockup when this size has one, else a drawn room.
  */
-export default function RoomPreview({ preview, width, height }: Props) {
+export default function RoomPreview({ preview, width, height, crop }: Props) {
   // The photo cropped to this size's aspect ratio — what the mosaic will show.
   const [cropped, setCropped] = useState<string | null>(null);
 
@@ -28,26 +31,21 @@ export default function RoomPreview({ preview, width, height }: Props) {
     img.onload = () => {
       if (stale) return;
       const target = width / height;
-      let sw = img.naturalWidth;
-      let sh = sw / target;
-      if (sh > img.naturalHeight) {
-        sh = img.naturalHeight;
-        sw = sh * target;
-      }
+      const { sx, sy, sw, sh } = cropRect(img.naturalWidth, img.naturalHeight, target, crop);
       const long = 440;
       const canvas = document.createElement("canvas");
       canvas.width = target >= 1 ? long : Math.round(long * target);
       canvas.height = target >= 1 ? Math.round(long / target) : long;
       canvas
         .getContext("2d")
-        ?.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, canvas.width, canvas.height);
+        ?.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       setCropped(canvas.toDataURL("image/jpeg", 0.88));
     };
     img.src = preview;
     return () => {
       stale = true;
     };
-  }, [preview, width, height]);
+  }, [preview, width, height, crop]);
 
   const frame = getFrameMockups(width, height)[0];
 

@@ -37,43 +37,57 @@ def decode_image(image_bytes: bytes) -> np.ndarray:
     return image
 
 
-def center_crop_to_ratio(img: np.ndarray, target_width: int, target_height: int) -> np.ndarray:
-    """Center-crop a BGR array to the target aspect ratio so it isn't stretched
-    when resized down to the stud grid."""
+def crop_to_ratio(img: np.ndarray, target_width: int, target_height: int,
+                  fx: float = 0.5, fy: float = 0.5) -> np.ndarray:
+    """Crop a BGR array to the target aspect ratio so it isn't stretched when
+    resized down to the stud grid.
+
+    `fx`/`fy` (0..1) place the crop window along the axis being cropped: 0 =
+    keep the left/top edge, 1 = the right/bottom edge, 0.5 = centered. Same
+    meaning as CSS `object-position: X% Y%`, which is what the create flow's
+    crop preview uses, so what the customer framed is what gets built.
+    """
     target_ratio = target_width / target_height
     height, width = img.shape[:2]
     img_ratio = width / height
 
     if img_ratio > target_ratio:
         new_width = int(height * target_ratio)
-        left = (width - new_width) // 2
+        left = int((width - new_width) * fx)
         return img[:, left:left + new_width]
     if img_ratio < target_ratio:
         new_height = int(width / target_ratio)
-        top = (height - new_height) // 2
+        top = int((height - new_height) * fy)
         return img[top:top + new_height, :]
     return img
 
 
+def center_crop_to_ratio(img: np.ndarray, target_width: int, target_height: int) -> np.ndarray:
+    """`crop_to_ratio`, centered (kept for the comparison tooling)."""
+    return crop_to_ratio(img, target_width, target_height)
+
+
 def prepare_source(image_bytes: bytes, width: int, height: int,
-                   cap_resolution: bool = True) -> np.ndarray:
-    """Decode, center-crop to the target aspect ratio, and cap the resolution.
+                   cap_resolution: bool = True,
+                   crop_x: float = 0.5, crop_y: float = 0.5) -> np.ndarray:
+    """Decode, crop to the target aspect ratio (centered unless `crop_x`/`crop_y`
+    say otherwise — see `crop_to_ratio`), and cap the resolution.
 
     Everything downstream (quantization *and* attention detection) works from
     this one image, so the cap is applied once, here.
 
     The cap matters: a 17MP phone photo bilateral-filtered at full resolution
     took **7 seconds**, in a service whose whole selling point is generating a
-    mosaic in milliseconds. Nothing downstream can use that detail — at the
-    96-stud maximum, `WORK_MAX` still leaves ~10 source pixels per stud, which
-    is more than an area average needs. Cropping first and scaling second keeps
-    the framing identical.
+    mosaic in milliseconds. Nothing downstream can use that detail — the cap
+    keeps ~10 source pixels per stud (`MIN_PIXELS_PER_STUD` lifts it to 1280px
+    at the 128-stud maximum), which is more than an area average needs.
+    Cropping first and scaling second keeps the framing identical.
 
     Pass `cap_resolution=False` for the `legacy` profile: it exists to reproduce
     brickmos's output exactly, and resizing from a capped image samples
     differently than resizing from the full one.
     """
-    cropped = center_crop_to_ratio(decode_image(image_bytes), width, height)
+    cropped = crop_to_ratio(decode_image(image_bytes), width, height, crop_x, crop_y)
     if not cap_resolution:
         return cropped
     longest = max(cropped.shape[:2])

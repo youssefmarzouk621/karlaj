@@ -1,18 +1,23 @@
 // Validation for the Parts page's batched save, shared by the page (to explain
 // why Save is blocked) and PUT /api/parts (so the rules hold server-side too).
 
-export type PartKind = "BRICK" | "BASE";
+export type PartKind = "BRICK" | "BASE" | "CONNECTOR";
+/// How the plate looks from the front. ROUND (e.g. 4073) leaves the base
+/// visible between pieces; every preview draws it that way.
+export type PartShape = "SQUARE" | "ROUND";
+export const PART_SHAPES: PartShape[] = ["SQUARE", "ROUND"];
 
 export interface PartEdit {
   id: string;
   name: string;
   kind: PartKind;
+  shape: PartShape;
   width: number;
   height: number;
   enabled: boolean;
   variable: number | null;
   weightGrams: number | null;
-  /// For a BRICK: ids of the bases it fits on. Ignored for a BASE.
+  /// For a BRICK: ids of the bases it fits on. Ignored for a BASE or CONNECTOR.
   compatibleBaseIds: string[];
 }
 

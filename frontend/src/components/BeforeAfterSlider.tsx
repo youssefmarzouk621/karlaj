@@ -6,6 +6,8 @@ import { drawMosaic, type DrawPlacement } from "@/lib/drawMosaic";
 interface Props {
   /** URL of the original uploaded photo (the "before"). */
   beforeSrc: string;
+  /** CSS object-position of the photo, so it lines up with the cropped mosaic. */
+  beforePosition?: string;
   gridRows: number;
   gridCols: number;
   placements: DrawPlacement[];
@@ -22,6 +24,7 @@ const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
  */
 export default function BeforeAfterSlider({
   beforeSrc,
+  beforePosition,
   gridRows,
   gridCols,
   placements,
@@ -119,7 +122,7 @@ export default function BeforeAfterSlider({
           alt="Original photo"
           draggable={false}
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-          style={{ clipPath: `inset(0 ${100 - pos}% 0 0)`, transition }}
+          style={{ clipPath: `inset(0 ${100 - pos}% 0 0)`, transition, objectPosition: beforePosition }}
         />
 
         {/* Corner labels */}

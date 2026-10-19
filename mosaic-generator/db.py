@@ -75,15 +75,17 @@ def load_palette_colors() -> list[dict] | None:
 
 def load_parts() -> list[dict] | None:
     """Enabled bricks, ordered by sort_order. `variable` on the 1x1 part is the
-    max 1x1 fraction cap. Bases (kind = 'BASE') are what the mosaic is built on,
-    not something to tile with, so they're excluded."""
+    max 1x1 fraction cap. `shape` ("square" / "round") is passed through to
+    every placement so the previews can draw round plates as round. Bases
+    (kind = 'BASE') are what the mosaic is built on, not something to tile
+    with, so they're excluded."""
     conn = _connect()
     if conn is None:
         return None
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT name, part_id, width, height, variable FROM parts "
+                "SELECT name, part_id, width, height, variable, shape FROM parts "
                 "WHERE enabled = 1 AND kind = 'BRICK' ORDER BY sort_order ASC"
             )
             rows = cur.fetchall()
@@ -96,6 +98,7 @@ def load_parts() -> list[dict] | None:
                 "part_id": r["part_id"],
                 "name": r["name"],
                 "variable": float(r["variable"]) if r["variable"] is not None else None,
+                "shape": (r.get("shape") or "SQUARE").lower(),
             }
             for r in rows
         ]
@@ -128,6 +131,27 @@ def load_base() -> dict | None:
             "part_id": r["part_id"],
             "name": r["name"],
         }
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def load_connector() -> dict | None:
+    """What joins neighbouring bases: the first enabled `kind = 'CONNECTOR'`
+    part by sort_order (e.g. the Technic pin 3673). None (none enabled, or DB
+    unavailable) keeps the built-in pin from `base.py`."""
+    conn = _connect()
+    if conn is None:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, part_id FROM parts "
+                "WHERE enabled = 1 AND kind = 'CONNECTOR' ORDER BY sort_order ASC LIMIT 1"
+            )
+            r = cur.fetchone()
+        return {"part_id": r["part_id"], "name": r["name"]} if r else None
     except Exception:
         return None
     finally:

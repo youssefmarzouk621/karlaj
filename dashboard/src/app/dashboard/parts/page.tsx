@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { validateParts, type PartKind } from "@/lib/parts";
+import { PART_SHAPES, validateParts, type PartKind, type PartShape } from "@/lib/parts";
 
 interface Part {
   id: string;
   name: string;
   partId: string;
   kind: PartKind;
+  shape: PartShape;
   width: number;
   height: number;
   enabled: boolean;
@@ -20,12 +21,14 @@ interface Part {
 // input ("0.", "") can be typed; they're parsed for validation and saving.
 interface Draft {
   enabled: boolean;
+  shape: PartShape;
   variable: string;
   weightGrams: string;
 }
 
 const toDraft = (p: Part): Draft => ({
   enabled: p.enabled,
+  shape: p.shape,
   variable: p.variable === null ? "" : String(p.variable),
   weightGrams: p.weightGrams === null ? "" : String(p.weightGrams),
 });
@@ -73,6 +76,7 @@ export default function PartsPage() {
     const o = toDraft(p);
     return (
       d.enabled !== o.enabled ||
+      d.shape !== o.shape ||
       parse(d.variable) !== parse(o.variable) ||
       parse(d.weightGrams) !== parse(o.weightGrams)
     );
@@ -81,7 +85,13 @@ export default function PartsPage() {
 
   const edited = parts.map((p) => {
     const d = drafts[p.id] ?? toDraft(p);
-    return { ...p, enabled: d.enabled, variable: parse(d.variable), weightGrams: parse(d.weightGrams) };
+    return {
+      ...p,
+      enabled: d.enabled,
+      shape: d.shape,
+      variable: parse(d.variable),
+      weightGrams: parse(d.weightGrams),
+    };
   });
   const errors = dirty ? validateParts(edited) : [];
 
@@ -98,6 +108,7 @@ export default function PartsPage() {
             enabled: p.enabled,
             variable: p.variable,
             weightGrams: p.weightGrams,
+            shape: p.shape,
           })),
       }),
     });
@@ -117,6 +128,7 @@ export default function PartsPage() {
 
   const bricks = parts.filter((p) => p.kind === "BRICK");
   const bases = parts.filter((p) => p.kind === "BASE");
+  const connectors = parts.filter((p) => p.kind === "CONNECTOR");
   const baseName = new Map(bases.map((b) => [b.id, b.name]));
 
   const renderRow = (p: Part) => {
@@ -124,7 +136,9 @@ export default function PartsPage() {
     const fits =
       p.kind === "BRICK"
         ? p.compatibleBaseIds.map((id) => baseName.get(id)).filter(Boolean).join(", ") || "no base"
-        : `${p.width}×${p.height} studs`;
+        : p.kind === "BASE"
+          ? `${p.width}×${p.height} studs`
+          : "joins bases";
     return (
       <div
         key={p.id}
@@ -149,6 +163,23 @@ export default function PartsPage() {
             className={inputClass}
           />
         </label>
+
+        {p.kind === "BRICK" && (
+          <label className="flex items-center gap-2 text-sm text-muted">
+            shape
+            <select
+              value={d.shape}
+              onChange={(e) => edit(p.id, { shape: e.target.value as PartShape })}
+              className={inputClass + " w-24"}
+            >
+              {PART_SHAPES.map((s) => (
+                <option key={s} value={s}>
+                  {s === "ROUND" ? "Round" : "Square"}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {is1x1(p) && (
           <label className="flex items-center gap-2 text-sm text-muted">
@@ -201,6 +232,13 @@ export default function PartsPage() {
         </p>
         <div className="space-y-2">{bases.map(renderRow)}</div>
 
+        <h2 className="font-bold mt-6 mb-1">Connectors</h2>
+        <p className="text-xs text-muted mb-3">
+          Pins that join neighbouring bases. The first enabled one is listed on the build
+          instructions; with none enabled, the Technic pin 2780 is assumed.
+        </p>
+        <div className="space-y-2">{connectors.map(renderRow)}</div>
+
         {errors.length > 0 && (
           <ul role="alert" className="mt-4 space-y-1 text-sm text-red-500">
             {errors.map((e) => (
@@ -232,7 +270,8 @@ export default function PartsPage() {
           single leftover cells. At least one base must be enabled, and every enabled base
           must fit every enabled brick. For a round-only mosaic, enable the round 1×1 and
           one of its bases, and disable every other brick. “g/piece” is the weight of one piece; it lets Inventory convert
-          between piece counts and purchased weight.
+          between piece counts and purchased weight. “shape” sets how previews draw the part: round plates
+          show the base between pieces.
         </p>
       </section>
     </div>

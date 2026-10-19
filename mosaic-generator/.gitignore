@@ -18,3 +18,5 @@ results/
 
 test_images/
 tests_result/
+# Optimization before/after renders (kept locally for review)
+optimization/out/

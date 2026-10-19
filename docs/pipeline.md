@@ -35,10 +35,11 @@ POST :8002/process                           ← mosaic-generator/main.py
   ├─ 3. find silhouette + text ................ attention.py  → priority map
   ├─ 4. downsample by region → quantize ....... preprocess.py → index grid
   │                                             palette.py
+  ├─ 4b. black darks + ink lines ............... ink.py        → index grid
   ├─ 5. despeckle + fit plates ................ bricks.py     → placements
   ├─ 6. aggregate parts list .................. bricks.py     → BOM
   ├─ 7. split into bags ....................... bags.py       → build sections
-  └─ 8. render PDF ............................ pdf.py        → cached in memory
+  └─ 8. render PDF (on first download) ........ pdf.py        → cached in memory
   │
   ▼  JSON: { job_id, width, height, grid, placements, parts_list, total_parts, bags }
 frontend route persists an Artwork row + pre-renders preview images
@@ -57,9 +58,14 @@ handles).
 ### 1. Request validation — [`main.py`](../mosaic-generator/main.py)
 
 `POST /process` takes multipart `image` plus form fields `width` and `height`
-(in **studs**). Rejected with `400` if: either dimension is outside **16–96**
-(`MIN_SIZE`/`MAX_SIZE`), the content type isn't `image/*`, or the upload exceeds
-**20 MB**.
+(in **studs**), and optionally `crop_x`/`crop_y` (0–1, default 0.5 — see stage
+2). Rejected with `400` if: either dimension is outside **16–128**
+(`MIN_SIZE`/`MAX_SIZE`), a crop value is outside 0–1, the content type isn't
+`image/*`, or the upload exceeds **20 MB**.
+
+**Budget: under 5 s per call** at the largest size. Measured on the 6.9 MB GTA VI
+cover: **~2.0 s** at 80×128, **~2.9 s** at 128×128, and 3.5 s for a 17 MB phone
+photo at 128×128. Per-stage times come back in `preprocessing.metrics.timings_ms`.
 
 ### 1b. Load the active configuration — [`db.py`](../mosaic-generator/db.py)
 
@@ -70,6 +76,8 @@ next generation with no restart:
   `sort_order`.
 - `load_parts()` — every `enabled` **brick** (`kind = 'BRICK'`) from `parts`,
   ordered by `sort_order`. The 1×1 row's `variable` column carries the max-1×1 cap.
+  Each part's `shape` (`SQUARE`/`ROUND`, set on the dashboard's Parts page) is
+  copied onto its placements so every preview draws round plates as round.
 - `load_base()` — the first `enabled` **base** (`kind = 'BASE'`, e.g. the 16×16
   Technic plate 65803). `None` means no base: no seam rule, free-form bags, and
   `base_layout: null` in the response — the pre-base behavior.
@@ -84,16 +92,27 @@ because the database is down — it silently produces the default-palette result
 
 ### 2. Decode, crop, cap resolution — [`mosaic.py`](../mosaic-generator/mosaic.py)
 
-`prepare_source` decodes, **center-crops** to the target aspect ratio (so the
+`prepare_source` decodes, **crops** to the target aspect ratio (so the
 picture isn't stretched into a non-square stud grid), then **caps the longest
 side** at `WORK_MAX` (1024px, or 10 source pixels per stud, whichever is
 larger).
 
 That cap is not cosmetic. Filtering a 17MP phone photo at full resolution cost
 **7 seconds** in a service that advertises milliseconds, and nothing downstream
-can use the detail: even at the 96-stud maximum, 1024px leaves ~10 source pixels
-per stud, more than an area average needs. Crop first, scale second, so framing
+can use the detail: 1024px leaves ~10 source pixels per stud at 96 studs, and
+above that `MIN_PIXELS_PER_STUD` lifts the cap (1280px at the 128-stud
+maximum) — more than an area average needs. Crop first, scale second, so framing
 is unchanged.
+
+The crop window is centered unless the request says otherwise: `crop_x`/`crop_y`
+(0–1) place it along the axis being cropped, with exactly the meaning of CSS
+`object-position: X% Y%` (`mosaic.crop_to_ratio`). The create flow's crop
+preview lets the customer drag the photo inside the window and sends those
+values, so what they framed is what gets built. The size step also splits the
+sizes into "Recommended for your photo" (same orientation — portrait /
+landscape / square, within ±5%) and "Other sizes", nothing hidden, with a
+"Crops N%" badge on every size — the GTA cover (0.90) loses 31% of its width at
+80×128.
 
 Everything downstream — quantization *and* detection — works from this one
 image.
@@ -161,6 +180,50 @@ nothing.
 > without comparing renders; use `tests_result/compare.py`.
 
 Output: an `(height, width)` array of **palette indices**.
+
+### 4b. Black darks and ink lines — [`ink.py`](../mosaic-generator/ink.py)
+
+Side by side with a hand-built GTA VI mosaic (80×128 round plates on black
+bases, kept in [`mosaic-generator/optimization/reference/`](../mosaic-generator/optimization/reference/)),
+our colors were nearly identical. The difference was **black**: the reference
+renders the panel gutters, logo frame and border black, and gives every letter
+and figure a continuous one-stud black outline. Ours had navy gutters (Dark Blue
+was the single most-used brick, 1,510 of 10,240 studs) and no outlines at all —
+comic linework is thinner than a stud, and the stage-4 average dissolves it.
+
+Two steps, after quantization and before tiling, ~20–35 ms together:
+
+**Darks to black.** A stud darker than `DARK_L` (L\* 22) becomes the palette's
+black — *if* black matches it nearly as well as the brick it got
+(`BLACK_RATIO`, 1.2). The condition is the important part: lightness alone can't
+tell a gutter from hair, both sit at L\* 5–7. What differs is hue fidelity. The
+gutters are dark purple and landed on Dark Blue, a wrong hue that black matches
+about as well (ratio ~1.10), so they go black. Messi's dark-brown hair landed on
+Dark Brown, a faithful hue (ratio ~1.5), so it stays brown — which is what keeps
+his head separate from the near-black background. A first version without the
+condition turned the hair black and the head vanished.
+
+**Ink lines.** A morphological black-hat on lightness (kernel ~1.2 studs), at
+working resolution, finds thin features darker than their surroundings. Pixels
+count as ink at black-hat > `INK_CONTRAST` (55) and L < `INK_MAX_L` (80, both
+8-bit); per-stud ink coverage over `STRONG` (30%) seeds a line and over `WEAK`
+(15%) extends it, so lines stay continuous. Two gates keep it to *lines*:
+components under `MIN_LINE_STUDS` (5) are dropped, and where ink is dense over a
+5×5-stud window (`MAX_DENSITY`) it is texture — hair, foliage — and left to
+stage 4. Ink studs are passed to `fit_bricks(protect=…)` so the despeckle keeps
+one-stud pieces of an outline. The thresholds were raised from a first pass
+(40/110) that also blacked out the gaps between the pink letters of a purple
+album title and the shadow folds of a beige suit.
+
+Measured with [`optimization/compare.py`](../mosaic-generator/optimization/compare.py)
+(round plates, DB palette):
+
+| image | studs changed | what changed |
+|---|---|---|
+| gta6.jpg 80×128 / 96×96 | 17.9% / 18.4% | gutters, frame, border black; letters and figures outlined |
+| 21.jpg (line-art cover) | 2.2% / 2.5% | hair outline, eyes, mouth, face cross |
+| messi.jpg | 4.3% / 4.0% | the "10", armband stripes, eye/mouth lines; hair stays brown |
+| wed.jpg, kanye.jpeg, album drake.jpeg | 1.0–3.5% | sunglasses, hair, the bear's outline; skin unchanged |
 
 ### 5. Index grid → brick placements — [`bricks.py`](../mosaic-generator/bricks.py)
 
@@ -258,8 +321,10 @@ exactly its base's parts. A 48×48 all-1×1 mosaic is 9 bags of 256.
 
 The base grid itself comes from [`base.py`](../mosaic-generator/base.py):
 `ceil(width / base_width) × ceil(height / base_height)` bases, plus
-`PINS_PER_SEAM` (2 — an assumption, confirm on a physical base) Technic pins
-(2780) per shared edge. A size that isn't a multiple of the base is covered by
+`PINS_PER_SEAM` (3, checked on a physical build) pins per shared edge — the
+outer edges of the artwork take none. The pin is the first enabled `kind = 'CONNECTOR'` part
+(`db.load_connector`, e.g. the Technic pin 3673), or the built-in 2780 when none
+is enabled. A size that isn't a multiple of the base is covered by
 rounding up, `exact: false`, and the uncovered studs stay bare.
 
 ### 8. PDF — [`pdf.py`](../mosaic-generator/pdf.py)
@@ -268,9 +333,11 @@ Page 1 is a scaled preview drawn placement by placement (each at its real brick
 size, so larger plates show as single tiles), with base seams and base/bag
 numbers overlaid when a base is configured; page 2+ is the bases + pins table
 (when there is a base) and then the parts table. Bases and pins are *not* in
-`parts_list` — it stays an aggregate of placements. Built
-eagerly during `/process` and held in the in-process `jobs` dict, then served by
-`GET /pdf/{job_id}`.
+`parts_list` — it stays an aggregate of placements. Round plates are drawn as
+discs on a dark base, like the other previews. Built **on first download**:
+`/process` stores the mosaic in the in-process `jobs` dict and `GET /pdf/{job_id}`
+renders and caches the PDF (~0.5 s). Building it eagerly cost ~0.8 s of every
+generation at 80×128, for a file most customers never open.
 
 **`jobs` is an in-memory dict** — restarting the service drops every stored PDF
 and `GET /pdf/{job_id}` starts returning 404 for older jobs. The mosaic data
@@ -295,7 +362,8 @@ logged, not fatal, and display falls back to a live client-side canvas draw.
   "placements": [                // one entry per physical brick
     { "part_id": "3023", "part_name": "1x2 Plate", "color_id": 86,
       "color_name": "LightBluishGray", "rgb": [175, 181, 199],
-      "row": 0, "col": 4, "brick_width": 2, "brick_height": 1 }
+      "row": 0, "col": 4, "brick_width": 2, "brick_height": 1,
+      "shape": "square" }        // "round" for round plates (e.g. 4073)
   ],
   "parts_list": [ { "part_id": "3023", "color_id": 86, "quantity": 137, ... } ],
   "total_parts": 1129,           // == placements.length, not the stud count
@@ -303,11 +371,20 @@ logged, not fatal, and display falls back to a live client-side canvas draw.
   "base_layout": {               // null when no base is enabled
     "part_id": "65803", "name": "16x16 Technic Base", "base_width": 16, "base_height": 16,
     "rows": 3, "cols": 3, "count": 9, "exact": true,
-    "pins": { "part_id": "2780", "name": "Technic Pin with Friction", "quantity": 24 }
+    "pins": { "part_id": "3673", "name": "Technic Pin", "quantity": 24 }
   },
-  "preprocessing": { "profile": "mosaic-generator", "steps": [], "metrics": {} }
+  "preprocessing": {
+    "profile": "mosaic-generator", "steps": ["ink"],
+    "metrics": { "dark_studs": 806, "ink_studs": 841,
+                 "timings_ms": { "decode": 256, "attention": 967, "quantize": 234,
+                                 "ink": 21, "fit": 264, "bags": 51, ... } }
+  }
 }
 ```
+
+The JSON is written with `json.dumps` directly (`MosaicJSONResponse`) rather
+than FastAPI's default `jsonable_encoder` walk, which took ~1.2 s on a 128×128
+response (16k placements) against ~0.1 s.
 
 `total_parts` counts **bricks, not studs** — a 48×48 mosaic is 2304 studs but far
 fewer parts once plates are merged.
@@ -369,6 +446,10 @@ palette is swapped in, check its neutral coverage first.
 | `MAX_DETAIL_AREA` | Biggest plate allowed on a subject outline (2 studs) | [`bricks.py`](../mosaic-generator/bricks.py) |
 | `TEXT_AREA_BUDGET` | Max share of frame the text detector may claim (0.12) | [`attention.py`](../mosaic-generator/attention.py) |
 | `WORK_MAX` | Working resolution cap — the main latency lever | [`mosaic.py`](../mosaic-generator/mosaic.py) |
+| Part shape | Square vs round drawing in every preview, 3D model and PDF | Dashboard → Parts (`parts.shape`) |
+| `DARKS_TO_BLACK`, `DARK_L`, `BLACK_RATIO` | Which dark studs become black | [`ink.py`](../mosaic-generator/ink.py) |
+| `INK_LINES`, `INK_CONTRAST`, `INK_MAX_L`, `STRONG`/`WEAK`, `MIN_LINE_STUDS`, `MAX_DENSITY` | Which dark lines become one-stud black outlines | [`ink.py`](../mosaic-generator/ink.py) |
+| `crop_x` / `crop_y` | Where the crop window sits (0–1, 0.5 = centered) | `/process` form fields; the crop preview in the create flow |
 
 ## Cost and complexity
 
@@ -390,6 +471,7 @@ here looked plausible and measured worse.
 
 ```bash
 cd mosaic-generator
+venv/bin/python optimization/compare.py          # before/after as round plates + timings
 venv/bin/python tests_result/compare.py          # A/B table + contact sheets
 venv/bin/python tests_result/check_attention.py  # silhouette/text mask overlays
 venv/bin/python tests_result/render.py --out tests_result/scratch --tag mine --priority

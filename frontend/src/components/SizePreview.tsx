@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { objectPosition, type CropPosition } from "@/lib/crop";
 import {
   MAX_STUDS,
   MIN_STUDS,
@@ -21,14 +22,20 @@ interface Props {
   /** The enabled preset sizes to snap to when custom sizing is off. */
   enabledSizes: SizeOption[];
   onChange: (w: number, h: number) => void;
+  /** The photo's width / height (needed to turn a drag into a crop offset). */
+  photoAspect?: number | null;
+  /** Where the crop window sits on the photo; dragging inside the box moves it. */
+  crop: CropPosition;
+  onCropChange: (crop: CropPosition) => void;
 }
 
 /**
  * Word-style resizable crop preview. The centered box is the mosaic; the square
  * frame around it represents the maximum enabled size. Dragging any corner
  * handle resizes the box outward/inward from the center, updating the stud
- * count live. Doubles as the crop preview (object-cover, matching the backend's
- * center-crop).
+ * count live. Doubles as the crop preview (object-cover + object-position,
+ * matching the generator's crop_to_ratio): dragging inside the box slides the
+ * photo to choose which part of it is kept.
  */
 export default function SizePreview({
   preview,
@@ -38,9 +45,14 @@ export default function SizePreview({
   customSizeEnabled,
   enabledSizes,
   onChange,
+  photoAspect,
+  crop,
+  onCropChange,
 }: Props) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const panRef = useRef<{ x: number; y: number; crop: CropPosition } | null>(null);
 
   // Map the pointer's distance from the frame center to a stud count. The frame
   // is square and its half-extent equals maxStud from the center each way.
@@ -81,11 +93,37 @@ export default function SizePreview({
     frameRef.current?.setPointerCapture(e.pointerId);
     applyFromPointer(e.clientX, e.clientY);
   };
+  // Panning: the photo is object-cover inside the box, so it overflows along
+  // one axis by (rendered size − box size). Dragging by d px moves the crop by
+  // d / overflow of the way across — and the photo follows the pointer, so the
+  // crop window moves the opposite way.
+  const startPan = (e: React.PointerEvent) => {
+    if (!photoAspect) return;
+    e.preventDefault();
+    panRef.current = { x: e.clientX, y: e.clientY, crop };
+    frameRef.current?.setPointerCapture(e.pointerId);
+  };
+  const applyPan = (clientX: number, clientY: number) => {
+    const start = panRef.current;
+    const box = boxRef.current?.getBoundingClientRect();
+    if (!start || !box || !photoAspect || box.width === 0) return;
+    const boxAspect = box.width / box.height;
+    const overflowX = photoAspect > boxAspect ? box.height * photoAspect - box.width : 0;
+    const overflowY = photoAspect < boxAspect ? box.width / photoAspect - box.height : 0;
+    const clamp = (v: number) => Math.min(1, Math.max(0, v));
+    onCropChange({
+      x: overflowX > 0 ? clamp(start.crop.x - (clientX - start.x) / overflowX) : start.crop.x,
+      y: overflowY > 0 ? clamp(start.crop.y - (clientY - start.y) / overflowY) : start.crop.y,
+    });
+  };
+
   const onMove = (e: React.PointerEvent) => {
     if (dragging) applyFromPointer(e.clientX, e.clientY);
+    else if (panRef.current) applyPan(e.clientX, e.clientY);
   };
   const endDrag = (e: React.PointerEvent) => {
     setDragging(false);
+    panRef.current = null;
     frameRef.current?.releasePointerCapture?.(e.pointerId);
   };
 
@@ -102,9 +140,9 @@ export default function SizePreview({
 
   return (
     <div className="rounded-[28px] bg-surface-2 p-5 flex flex-col gap-3.5">
-      <span className="flex justify-between text-[13px] font-semibold">
+      <span className="flex justify-between gap-3 text-[13px] font-semibold">
         Crop
-        <span className="font-normal text-ink-2">Drag any corner</span>
+        <span className="font-normal text-ink-2 text-right">Drag corners to resize · drag photo to move</span>
       </span>
 
       <div
@@ -127,9 +165,13 @@ export default function SizePreview({
         )}
 
         {/* The mosaic box, centered and resizable. */}
-        <div className="absolute left-1/2 top-1/2" style={boxStyle}>
-          {/* Clipped crop preview. */}
-          <div className="absolute inset-0 overflow-hidden ring-2 ring-white shadow-[0_0_0_9999px_rgba(17,16,15,.45)]">
+        <div ref={boxRef} className="absolute left-1/2 top-1/2" style={boxStyle}>
+          {/* Clipped crop preview; drag it to move the crop. */}
+          <div
+            data-testid="crop-box"
+            onPointerDown={startPan}
+            className="absolute inset-0 overflow-hidden ring-2 ring-white shadow-[0_0_0_9999px_rgba(17,16,15,.45)] cursor-grab active:cursor-grabbing"
+          >
             {preview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -137,6 +179,7 @@ export default function SizePreview({
                 alt="Crop preview"
                 draggable={false}
                 className="pointer-events-none h-full w-full object-cover"
+                style={{ objectPosition: objectPosition(crop) }}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xs text-ink-2">

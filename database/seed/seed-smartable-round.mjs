@@ -32,6 +32,7 @@ const PART = {
   partId: "4073",
   width: 1,
   height: 1,
+  shape: "ROUND",
   variable: null,
   weightGrams: 0.1, // approximate; editable in the dashboard
 };
@@ -103,7 +104,7 @@ async function main() {
   const part = await prisma.part.upsert({
     where: { partId: PART.partId },
     // `enabled` is not updated: toggling parts is done in the dashboard.
-    update: { name: PART.name, width: PART.width, height: PART.height },
+    update: { name: PART.name, width: PART.width, height: PART.height, shape: PART.shape },
     create: {
       ...PART,
       enabled: false,

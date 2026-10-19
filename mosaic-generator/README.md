@@ -19,7 +19,8 @@ so a mosaic generates in a few milliseconds (pixel-identical output).
 
 ```
 decode -> crop -> cap resolution -> detect silhouette/text
-       -> downsample by region -> nearest CIELAB color -> fit plates
+       -> downsample by region -> nearest CIELAB color
+       -> black darks + ink lines -> fit plates
 ```
 
 Full write-up, including why the original "no preprocessing" rule was right but
@@ -41,9 +42,17 @@ uvicorn main:app --reload --port 8002
 Endpoints (same shape as `backend/`, so the frontend can switch via
 `PYTHON_API_URL`):
 
-- `POST /process` — multipart `image` + form `width`/`height` (studs, 16–96) →
+- `POST /process` — multipart `image` + form `width`/`height` (studs, 16–128),
+  optional `crop_x`/`crop_y` (0–1 crop position, default centered) →
   `{ job_id, grid, placements, parts_list, total_parts, bags, ... }`
-- `GET /pdf/{job_id}` — the generated instruction/BOM PDF.
+- `GET /pdf/{job_id}` — the instruction/BOM PDF, built on first request.
+
+`/process` must stay under 5 s; per-stage times are in
+`preprocessing.metrics.timings_ms`.
+
+Before/after renders of any pipeline change (round plates on a black base, next
+to the reference build): `venv/bin/python optimization/compare.py`, output in
+`optimization/out/` (gitignored).
 
 Docs: http://localhost:8002/docs
 
@@ -55,6 +64,7 @@ Docs: http://localhost:8002/docs
 | `preprocess.py` | region-aware downsampling, tone compression, profiles |
 | `attention.py` | silhouette (saliency + GrabCut) and text (MSER) → priority map |
 | `mosaic.py` | decode / crop / resolution cap / quantize → index grid |
+| `ink.py` | dark studs → black, thin dark linework → one-stud black outlines |
 | `bricks.py` | grid → placements + parts list, merging same-color runs into plates |
 | `bags.py` | split into build sections |
 | `pdf.py` | preview + BrickLink BOM PDF |

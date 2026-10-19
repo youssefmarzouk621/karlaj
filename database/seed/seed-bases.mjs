@@ -1,7 +1,9 @@
 // Idempotent seed for mosaic bases: parts with kind = BASE, plus which bricks
-// fit on each one. Bases are what a mosaic is built on (the generator never
-// places them); the dashboard requires at least one enabled base, compatible
-// with every enabled brick.
+// fit on each one, and the connectors (kind = CONNECTOR) that pin bases
+// together. Bases are what a mosaic is built on (the generator never places
+// them); the dashboard requires at least one enabled base, compatible with
+// every enabled brick. The first enabled connector is the pin the generator
+// lists for joining bases.
 //
 // Run: node seed/seed-bases.mjs   (after `npm run db:push`, and after the
 // brick seeds so the compatibility links have bricks to point at)
@@ -22,6 +24,18 @@ const BASES = [
     height: 16,
     weightGrams: 11.5, // approximate; editable in the dashboard
     fits: "*",
+  },
+];
+
+const CONNECTORS = [
+  {
+    // Technic pin without friction ridges, sold by Yusin Chen (Bebricks):
+    // https://french.alibaba.com/product-detail/subject-1601712766124.html
+    name: "Technic Pin",
+    partId: "3673",
+    width: 1,
+    height: 2,
+    weightGrams: 0.18, // approximate; editable in the dashboard
   },
 ];
 
@@ -48,6 +62,19 @@ async function main() {
     console.log(
       `Base ${b.partId} ${exists ? "updated" : "created"} (${base.enabled ? "enabled" : "disabled"}), ` +
         `fits ${targets.length} bricks.`
+    );
+  }
+
+  for (const c of CONNECTORS) {
+    const exists = await prisma.part.findUnique({ where: { partId: c.partId } });
+    const part = await prisma.part.upsert({
+      where: { partId: c.partId },
+      // `enabled` is not updated: which connector is live is chosen in the dashboard.
+      update: { name: c.name, kind: "CONNECTOR" },
+      create: { ...c, kind: "CONNECTOR", enabled: true, sortOrder: sortOrder++ },
+    });
+    console.log(
+      `Connector ${c.partId} ${exists ? "updated" : "created"} (${part.enabled ? "enabled" : "disabled"}).`
     );
   }
 }

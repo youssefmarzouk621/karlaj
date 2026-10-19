@@ -29,6 +29,8 @@ const TABS: { id: Tab; label: string }[] = [
 interface Props {
   jobId: string;
   photo: string | null;
+  /** CSS object-position of the photo crop the mosaic was built from. */
+  photoPosition?: string;
   gridRows: number;
   gridCols: number;
   placements: DrawPlacement[];
@@ -36,7 +38,15 @@ interface Props {
 }
 
 /** One big stage with tabs for the ways to look at the finished mosaic. */
-export default function ResultViewer({ jobId, photo, gridRows, gridCols, placements, colorMap }: Props) {
+export default function ResultViewer({
+  jobId,
+  photo,
+  photoPosition,
+  gridRows,
+  gridCols,
+  placements,
+  colorMap,
+}: Props) {
   const [tab, setTab] = useState<Tab>("print");
   const mosaic = { gridRows, gridCols, placements, colorMap };
 
@@ -81,7 +91,7 @@ export default function ResultViewer({ jobId, photo, gridRows, gridCols, placeme
       {tab === "compare" && (
         <div className="absolute inset-0 grid place-items-center px-6 pt-20 pb-6">
           <div className="w-full" style={{ maxWidth: `min(600px, ${(520 * gridCols) / Math.max(gridRows, 1)}px)` }}>
-            <BeforeAfterSlider key={jobId} beforeSrc={photo ?? ""} {...mosaic} />
+            <BeforeAfterSlider key={jobId} beforeSrc={photo ?? ""} beforePosition={photoPosition} {...mosaic} />
           </div>
         </div>
       )}

@@ -58,11 +58,11 @@ DEFAULT_PARTS: list[dict] = [
     {"width": 2, "height": 4, "part_id": "3020", "name": "2x4 Plate", "variable": None},
 ]
 
-Brick = tuple[int, int, str, str]  # (brick_height, brick_width, part_id, name)
+Brick = tuple[int, int, str, str, str]  # (brick_height, brick_width, part_id, name, shape)
 
 
 def _orientations(parts: list[dict]) -> list[Brick]:
-    """Both rotations of every part as concrete (bh, bw, part_id, name),
+    """Both rotations of every part as concrete (bh, bw, part_id, name, shape),
     de-duplicated and sorted largest-area first (deterministic tie-break)."""
     seen: set[tuple[int, int]] = set()
     out: list[Brick] = []
@@ -72,7 +72,7 @@ def _orientations(parts: list[dict]) -> list[Brick]:
             if (bh, bw) in seen:
                 continue
             seen.add((bh, bw))
-            out.append((bh, bw, p["part_id"], p["name"]))
+            out.append((bh, bw, p["part_id"], p["name"], p.get("shape") or "square"))
     out.sort(key=lambda t: (-(t[0] * t[1]), t[0], t[1]))
     return out
 
@@ -118,7 +118,7 @@ def _despeckle_isolated(grid: np.ndarray, protect: np.ndarray | None = None) -> 
 
 
 def _placement(palette: Palette, color_index: int, r: int, c: int,
-               bh: int, bw: int, part_id: str, part_name: str) -> dict:
+               bh: int, bw: int, part_id: str, part_name: str, shape: str) -> dict:
     color = palette.colors[color_index]
     return {
         "part_id": part_id,
@@ -130,11 +130,12 @@ def _placement(palette: Palette, color_index: int, r: int, c: int,
         "col": c,
         "brick_width": bw,
         "brick_height": bh,
+        "shape": shape,
     }
 
 
 def _greedy_fit(grid: np.ndarray, palette: Palette,
-                expanded: list[tuple[int, int, str, str]],
+                expanded: list[Brick],
                 detail: np.ndarray | None = None,
                 cell: tuple[int, int] | None = None) -> list[dict]:
     """Greedy top-left scan; at each uncovered stud place the largest brick that
@@ -160,7 +161,7 @@ def _greedy_fit(grid: np.ndarray, palette: Palette,
                 continue
             color = int(grid[r, c])
             in_detail = bool(detail[r, c]) if detail is not None else False
-            for bh, bw, part_id, part_name in expanded:
+            for bh, bw, part_id, part_name, shape in expanded:
                 if in_detail and bh * bw > MAX_DETAIL_AREA:
                     continue
                 if r + bh > rows or c + bw > cols:
@@ -177,7 +178,7 @@ def _greedy_fit(grid: np.ndarray, palette: Palette,
                 if detail is not None and not np.all(detail[r:r + bh, c:c + bw] == in_detail):
                     continue
                 covered[r:r + bh, c:c + bw] = True
-                placements.append(_placement(palette, color, r, c, bh, bw, part_id, part_name))
+                placements.append(_placement(palette, color, r, c, bh, bw, part_id, part_name, shape))
                 break
     return placements
 
@@ -247,7 +248,8 @@ def _detail_plans(priority: np.ndarray | None) -> list[np.ndarray | None]:
 def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
                max_1x1_fraction: float | None = None,
                priority: np.ndarray | None = None,
-               base: dict | None = None) -> tuple[list[dict], np.ndarray]:
+               base: dict | None = None,
+               protect: np.ndarray | None = None) -> tuple[list[dict], np.ndarray]:
     """Merge same-color studs into the enabled plates, keeping 1x1s at or under
     the cap.
 
@@ -267,6 +269,10 @@ def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
     `base` (from `db.load_base`) keeps every brick inside a single base: no
     plate crosses a seam between two bases.
 
+    `protect` marks extra studs the despeckle must not touch — the ink-line
+    studs from `ink.py`, where a lone black stud is a piece of an outline,
+    not noise.
+
     Returns (placements, grid_used) — `grid_used` is the lightly-despeckled index
     grid the placements were built from, so the color grid agrees with them.
     """
@@ -276,10 +282,12 @@ def fit_bricks(index_grid: np.ndarray, palette: Palette, parts: list[dict],
     # a corner). Across a subject's *interior* it is skin texture and sensor
     # noise: protecting all of it kept the 1x1 share at ~49%, which forced the
     # cap search down to a tiny-plate catalog and doubled the part count.
-    protect = None
+    keep = protect
     if priority is not None:
-        protect = _edge_band(priority == SILHOUETTE) | (priority == TEXT)
-    grid = _despeckle_isolated(np.asarray(index_grid), protect)
+        keep = _edge_band(priority == SILHOUETTE) | (priority == TEXT)
+        if protect is not None:
+            keep = keep | protect
+    grid = _despeckle_isolated(np.asarray(index_grid), keep)
     cap = max_1x1_fraction if max_1x1_fraction is not None else _cap_from_parts(parts)
 
     tiers = _tiers(parts)

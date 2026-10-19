@@ -5,6 +5,8 @@ import { useDropzone, type FileRejection } from "react-dropzone";
 
 interface Props {
   onImageSelected: (file: File, preview: string) => void;
+  /** The photo's pixel size, once it has loaded (drives the size step's orientation filter). */
+  onDimensions?: (width: number, height: number) => void;
   preview: string | null;
 }
 
@@ -32,7 +34,7 @@ function UploadGlyph({ size }: { size: number }) {
   );
 }
 
-export default function ImageUpload({ onImageSelected, preview }: Props) {
+export default function ImageUpload({ onImageSelected, onDimensions, preview }: Props) {
   const [rejection, setRejection] = useState<{ title: string; detail: string } | null>(null);
   const [fileName, setFileName] = useState("");
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
@@ -79,7 +81,11 @@ export default function ImageUpload({ onImageSelected, preview }: Props) {
           <img
             src={preview}
             alt="Uploaded preview"
-            onLoad={(e) => setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            onLoad={(e) => {
+              const d = { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight };
+              setDims(d);
+              onDimensions?.(d.w, d.h);
+            }}
             className="block w-[168px] h-[168px] object-cover"
           />
           <span className="absolute left-2.5 bottom-2 max-w-[150px] truncate text-[11px] text-[#5C564E]">

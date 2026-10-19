@@ -18,13 +18,26 @@ def _rgb_to_color(rgb):
     return HexColor(f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}")
 
 
+# What shows between round plates: the (black) base plate underneath.
+BASE_COLOR = HexColor("#141414")
+
+
 def _draw_mosaic(c, placements, rows, cols, x, y, max_w, max_h, layout=None):
     cell = min(max_w / cols, max_h / rows) if cols and rows else 0
+    # Round plates leave the base visible around each piece: paint it once
+    # under the whole mosaic, then draw each round plate as a disc.
+    if any(p.get("shape") == "round" for p in placements):
+        c.setFillColor(BASE_COLOR)
+        c.rect(x, y, cols * cell, rows * cell, fill=1, stroke=0)
     for p in placements:
         bw, bh = p["brick_width"], p["brick_height"]
         cx = x + p["col"] * cell
         cy = y + (rows - 1 - p["row"] - (bh - 1)) * cell
         c.setFillColor(_rgb_to_color(p["rgb"]))
+        if p.get("shape") == "round":
+            c.circle(cx + bw * cell / 2, cy + bh * cell / 2, 0.46 * min(bw, bh) * cell,
+                     fill=1, stroke=0)
+            continue
         c.setStrokeColor(HexColor("#444444"))
         c.setLineWidth(0.25)
         c.rect(cx, cy, bw * cell, bh * cell, fill=1, stroke=1)

@@ -12,21 +12,26 @@ from __future__ import annotations
 
 import math
 
-# What joins two neighbouring bases. 65803 has holes along every side; the
-# LEGO Art system pins them with friction Technic pins.
+# What joins two neighbouring bases when no CONNECTOR part is enabled in the
+# DB (`db.load_connector`). 65803 has holes along every side; the LEGO Art
+# system pins them with friction Technic pins.
 PIN_PART_ID = "2780"
 PIN_NAME = "Technic Pin with Friction"
-# Pins per shared edge. An assumption — confirm against a physical base.
-PINS_PER_SEAM = 2
+# Pins per shared edge between two neighbouring bases (checked on a physical
+# build). Outer edges of the artwork have no neighbour, so they take no pins.
+PINS_PER_SEAM = 3
 
 
-def base_layout(width: int, height: int, base: dict | None) -> dict | None:
+def base_layout(
+    width: int, height: int, base: dict | None, connector: dict | None = None
+) -> dict | None:
     """Grid of bases covering a `width` x `height` stud mosaic, or None when no
     base is configured (the pre-base behavior).
 
     Sizes that aren't a multiple of the base are covered by rounding up; the
     last row/column of bases is then only partly used (`exact` is False), and
-    those studs are left bare.
+    those studs are left bare. `connector` ({part_id, name}) is the pin that
+    joins bases; None uses the built-in PIN_PART_ID.
     """
     if not base:
         return None
@@ -43,8 +48,8 @@ def base_layout(width: int, height: int, base: dict | None) -> dict | None:
         "count": rows * cols,
         "exact": width % bw == 0 and height % bh == 0,
         "pins": {
-            "part_id": PIN_PART_ID,
-            "name": PIN_NAME,
+            "part_id": connector["part_id"] if connector else PIN_PART_ID,
+            "name": connector["name"] if connector else PIN_NAME,
             "quantity": seams * PINS_PER_SEAM,
         },
     }

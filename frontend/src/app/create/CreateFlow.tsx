@@ -7,9 +7,12 @@ import ImageUpload from "@/components/ImageUpload";
 import SizeSelector, {
   MIN_STUDS,
   MAX_STUDS,
+  bestFitSize,
   sizeCm,
+  splitSizesForPhoto,
   type SizeOption,
 } from "@/components/SizeSelector";
+import { CENTERED, objectPosition, type CropPosition } from "@/lib/crop";
 import SizePreview from "@/components/SizePreview";
 import RoomPreview from "@/components/RoomPreview";
 import GeneratingView from "@/components/GeneratingView";
@@ -70,6 +73,11 @@ export default function CreateFlow({
   const [preview, setPreview] = useState<string | null>(null);
   const [width, setWidth] = useState(defaultSize.width);
   const [height, setHeight] = useState(defaultSize.height);
+  // The photo's width / height (once loaded) and where the crop window sits on it.
+  const [photoAspect, setPhotoAspect] = useState<number | null>(null);
+  const [crop, setCrop] = useState<CropPosition>(CENTERED);
+  // The crop the current result was generated from (the before/after photo follows it).
+  const [resultCrop, setResultCrop] = useState<CropPosition>(CENTERED);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MosaicResult | null>(null);
@@ -81,9 +89,28 @@ export default function CreateFlow({
   const handleImageSelected = (f: File, url: string) => {
     setFile(f);
     setPreview(url);
+    setPhotoAspect(null);
+    setCrop(CENTERED);
     setResult(null);
     setError(null);
     setCartStatus("idle");
+  };
+
+  // Once the photo's shape is known, keep the current size if it's one of the
+  // recommended ones (e.g. picked on the pricing page); otherwise switch to
+  // the size that crops the least of it. Every size stays selectable.
+  const handlePhotoDimensions = (w: number, h: number) => {
+    const aspect = w / h;
+    setPhotoAspect(aspect);
+    const suits = splitSizesForPhoto(sizes, aspect).recommended.some(
+      (s) => s.enabled && s.width === width && s.height === height
+    );
+    if (suits) return;
+    const best = bestFitSize(sizes, aspect);
+    if (best) {
+      setWidth(best.width);
+      setHeight(best.height);
+    }
   };
 
   const handleGenerate = async () => {
@@ -97,6 +124,8 @@ export default function CreateFlow({
     formData.append("image", file);
     formData.append("width", String(width));
     formData.append("height", String(height));
+    formData.append("crop_x", String(crop.x));
+    formData.append("crop_y", String(crop.y));
 
     try {
       const res = await fetch("/api/convert", {
@@ -110,6 +139,7 @@ export default function CreateFlow({
       }
       const data: MosaicResult = await res.json();
       setResult(data);
+      setResultCrop(crop);
       setCartStatus("idle");
       setStep(2);
     } catch (err: unknown) {
@@ -133,6 +163,8 @@ export default function CreateFlow({
   const handleStartOver = () => {
     setFile(null);
     setPreview(null);
+    setPhotoAspect(null);
+    setCrop(CENTERED);
     setResult(null);
     setError(null);
     setCartStatus("idle");
@@ -233,7 +265,11 @@ export default function CreateFlow({
                 We&apos;ll center-crop it to match your mosaic size.
               </p>
             </div>
-            <ImageUpload onImageSelected={handleImageSelected} preview={preview} />
+            <ImageUpload
+              onImageSelected={handleImageSelected}
+              onDimensions={handlePhotoDimensions}
+              preview={preview}
+            />
             <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-4">
               <span className="flex gap-2 items-center text-sm text-ink-2">
                 <LockIcon />
@@ -265,6 +301,7 @@ export default function CreateFlow({
                 minStud={minStud}
                 maxStud={maxStud}
                 customSizeEnabled={customSizeEnabled}
+                photoAspect={photoAspect}
                 onChange={(w, h) => {
                   setWidth(w);
                   setHeight(h);
@@ -304,8 +341,11 @@ export default function CreateFlow({
                   setWidth(w);
                   setHeight(h);
                 }}
+                photoAspect={photoAspect}
+                crop={crop}
+                onCropChange={setCrop}
               />
-              <RoomPreview preview={preview} width={width} height={height} />
+              <RoomPreview preview={preview} width={width} height={height} crop={crop} />
             </div>
           </section>
         )}
@@ -327,6 +367,7 @@ export default function CreateFlow({
               <ResultViewer
                 jobId={result.job_id}
                 photo={preview}
+                photoPosition={objectPosition(resultCrop)}
                 gridRows={result.height}
                 gridCols={result.width}
                 placements={result.placements}
